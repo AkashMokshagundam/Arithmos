@@ -1,5 +1,2 @@
-*.ctxt
-*.class
-/.bluej/
-bluej.pkh
-+backup*/
+*.class 
+Launch4J/ 

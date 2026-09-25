@@ -3,7 +3,8 @@ import javax.swing.text.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import java.awt.geom.Line2D;        
+import java.awt.geom.Line2D;  
+import java.awt.geom.Path2D;      
 import java.awt.BasicStroke;        
 import java.awt.Graphics2D;         
 import java.awt.RenderingHints;
@@ -22,10 +23,13 @@ import javax.swing.plaf.basic.ComboPopup;
 import javax.swing.event.*;
 import java.util.Set;
 import java.util.function.*;
+import java.util.Arrays;
+import java.util.TreeMap;
 
 public class CopyOfArithmos {
-    
-    static JFrame frame = new JFrame("CopyOfArithmos");
+    private static boolean isDeveloping = false;    //Turn true while developing the program
+    private static CopyOfArithmos instance;
+    static JFrame frame = new JFrame("Arithmos");
     static JTextPane display = new JTextPane(); 
     static boolean isDegreeMode = false;
     static double lastAnswer = 0;
@@ -36,14 +40,17 @@ public class CopyOfArithmos {
     static List<JTextField> matrixBFields = new ArrayList<>();
     static int rowsA = 2, colsA = 2, rowsB = 2, colsB = 2; 
     static boolean isUppercase = false;
-    static List<RoundedButton> alphaButtons = new ArrayList<>();
-    static List<RoundedButton> greekButtons = new ArrayList<>();
+    static List<JButton> alphaButtons = new ArrayList<>();
+    static List<JButton> greekButtons = new ArrayList<>();
     static JTabbedPane tabbedPane;
     static JTextField inputField = new JTextField();
     static GraphCanvas canvas;
     static Color[] graphColors = {
-    Color.CYAN, Color.MAGENTA, Color.ORANGE, 
-    Color.GREEN, Color.PINK, Color.YELLOW, Color.RED
+        new Color(0, 255, 170), // Mint
+    new Color(255, 100, 100), // Red
+    new Color(100, 200, 255), // Blue
+    new Color(255, 200, 50),  // Yellow
+    new Color(200, 100, 255)  // Purple
     };
     static int colorIndex = 0;
     static DefaultListModel<EquationEntry> model = new DefaultListModel<>();
@@ -53,11 +60,6 @@ public class CopyOfArithmos {
     private static JComboBox<String> categoryBox, fromUnitBox, toUnitBox;
     private static JTextField convInput;
     private static JLabel convResult;
-    private static final Color bgColor = new Color(25, 25, 25);
-    private static final Color dropdownBg = new Color(40, 40, 40);
-    private static final Color textColor = Color.WHITE;
-    private static final Color focusColor = new Color(0, 255, 190);
-
     private static final Font segoeFont = new Font("Segoe UI", Font.PLAIN, 18);
     private static final Font inputFont = new Font("Segoe UI", Font.BOLD, 48);
     // Data for the dropdowns
@@ -84,13 +86,14 @@ public class CopyOfArithmos {
     EquationLayer(String f, Color c) { this.formula = f; this.color = c; }
     }
     static Theme currentTheme = new Theme(
-        new Color(25, 25, 25),  // Background
-        Color.WHITE,               // Foreground
-        new Color(34, 34, 34),  // Regular buttons
-        new Color(17, 17, 17),  // Function buttons
-        new Color(230, 136, 136),    // C & CE
-        new Color(238, 255, 122),    // Memory & DEG
-        new Color(238, 255, 122)      // Equals
+        new Color(230, 230, 230),     //bgColor
+        Color.BLACK,            //foreground
+        new Color(221,  221, 221),    //regularButton
+        new Color(239, 239, 239),    //functionButton
+        new Color(166, 73, 73),    //clearColor
+        new Color(73, 79, 166),    //memoryDegColor
+        new Color(166, 73, 73)    //equalsColor
+
     );
     
     private static final java.util.regex.Pattern NUMERIC_PATTERN = java.util.regex.Pattern.compile("^-?\\d+(\\.\\d+)?$");
@@ -112,12 +115,39 @@ public class CopyOfArithmos {
     private static CardLayout cardLayout;
     private static JPanel sideMenu;
     private static JLayeredPane layeredPane;
-    private static final Color MENU_BG = new Color(30, 30, 30); // Matches your dark theme
-    private static final Color HOVER_COLOR = new Color(50, 50, 50);
     private static boolean isMenuOpen = false;
     private static JPanel currentButtonGrid = null;
     static JPanel buttonsPanel;
-
+    private static JLabel panelTitleLabel; // The label next to the ham button
+    // Add these at the top with your other private variables
+    private static String topStatusText = ""; 
+    private static boolean isTangMode = false;
+    private static boolean isShadeMode = false;
+    private static double tangM, tangC;
+    private static JTextField activePhysicsField = null;
+    private static JTextField activeChemField = null;
+    private static JComboBox<String> physicsSelector;
+    private static JTextField pf1, pf2, pf3;
+    private static JComboBox<String> pu1, pu2, pu3;
+    private static JLabel pl1, pl2, pl3;
+    private static int activeFieldIdx = 0;
+    private static boolean isInternalUpdate = false;
+    private static ContourPanel contourPanel = new ContourPanel();
+    private static Map<String, PhysData> physicsRegistry = new TreeMap<>();
+    private static JComboBox<String> chemSelector;
+    private static JTextField cf1, cf2, cf3;
+    private static JComboBox<String> cu1, cu2, cu3;
+    private static JLabel cl1, cl2, cl3;
+    private static int activeChemFieldIdx = 0;
+    private static boolean isChemInternalUpdate = false;
+    private static Map<String, ChemData> chemRegistry = new TreeMap<>();
+    private static final Map<String, FormulaData> chemistryFormulas = new TreeMap<>();
+    public static boolean isTangent = false;
+    public static double tangX = 0;
+    
+    public CopyOfArithmos(){
+        instance = this;
+    }
     public static void main(String[] args) {
 
     initializeDistanceData();
@@ -134,9 +164,12 @@ public class CopyOfArithmos {
     initializeRotationalDynamics();
     initializeRadiationLight();
     initializeMathComputing();
-
+    initializeChemistryData(); // Make sure this runs!
+    initializePhysicsData();
+    setupSideMenu();
+    
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-    frame.setSize(400, 600);
+    frame.setSize(450, 600);
     frame.setLocationRelativeTo(null);
 
     // Use layered pane as content pane directly
@@ -160,9 +193,9 @@ public class CopyOfArithmos {
     // ===== DISPLAY PANEL =====
     displayPanel.setLayout(new BorderLayout());
     displayPanel.setBounds(0, 0, width, 160);
-    displayPanel.setBackground(currentTheme.background);
+    displayPanel.setBackground(currentTheme.bgColor);
 
-    display.setBackground(currentTheme.background);
+    display.setBackground(currentTheme.bgColor);
     display.setForeground(currentTheme.foreground);
     display.setCaretColor(currentTheme.foreground);
     display.setFont(new Font("Segoe UI", Font.BOLD, 42));
@@ -179,12 +212,12 @@ public class CopyOfArithmos {
 
     // ===== RAD / PREVIEW PANEL =====
     modeLabel = new JLabel("RAD");
-    modeLabel.setForeground(new Color(97, 120, 195));
+    modeLabel.setForeground(currentTheme.memoryDegColor);
     modeLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
     modeLabel.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 0)); 
     // slight left padding to align under hamburger
 
-    previewLabel.setForeground(Color.WHITE);
+    previewLabel.setForeground(currentTheme.foreground);
     previewLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
     JPanel bottomPanel = new JPanel(new BorderLayout());
@@ -201,7 +234,7 @@ public class CopyOfArithmos {
 
     // ===== BUTTONS PANEL =====
     buttonsPanel = new JPanel(new BorderLayout());
-    buttonsPanel.setBackground(new Color(20, 20, 20));
+    buttonsPanel.setBackground(currentTheme.bgColor);
     buttonsPanel.setBounds(0, 160, width, height - 160);
     buttonsPanel.add(createBasicPanel(), BorderLayout.CENTER);
 
@@ -216,7 +249,7 @@ public class CopyOfArithmos {
     JButton hamburgerBtn = new JButton("☰");
     hamburgerBtn.setFont(new Font("Segoe UI Symbol", Font.BOLD, 24));
     hamburgerBtn.setForeground(currentTheme.foreground);
-    hamburgerBtn.setBackground(currentTheme.background);
+    hamburgerBtn.setBackground(currentTheme.bgColor);
 
     hamburgerBtn.setFocusPainted(false);
     hamburgerBtn.setBorderPainted(false);
@@ -232,11 +265,19 @@ public class CopyOfArithmos {
             layeredPane.moveToFront(sideMenu);
         }
     });
+    panelTitleLabel = new JLabel("STANDARD"); // Default title
+    panelTitleLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
+    panelTitleLabel.setForeground(currentTheme.foreground);
+    panelTitleLabel.setBounds(60, 5, 200, 40); 
+
+    // Add it to the same layer as the ham button
 
     // ===== LAYER ASSEMBLY =====
     layeredPane.add(mainPanel, JLayeredPane.DEFAULT_LAYER);
     layeredPane.add(sideMenu, JLayeredPane.PALETTE_LAYER);
     layeredPane.add(hamburgerBtn, JLayeredPane.DRAG_LAYER);
+    layeredPane.add(panelTitleLabel, JLayeredPane.PALETTE_LAYER);
+    
 
     // ===== ENTER HANDLING =====
     display.getInputMap().put(
@@ -287,12 +328,12 @@ public class CopyOfArithmos {
     // Hover Effect: Lights up when you mouse over it
     btn.addMouseListener(new java.awt.event.MouseAdapter() {
         public void mouseEntered(java.awt.event.MouseEvent evt) {
-            btn.setBackground(focusColor); // Use your mint/green focus color
-            btn.setForeground(Color.BLACK);
+            btn.setBackground(currentTheme.functionButton); // Use your mint/green focus color
+            btn.setForeground(currentTheme.foreground);
         }
         public void mouseExited(java.awt.event.MouseEvent evt) {
-            btn.setBackground(new Color(45, 45, 45));
-            btn.setForeground(Color.WHITE);
+            btn.setBackground(currentTheme.regularButton);
+            btn.setForeground(currentTheme.foreground);
         }
     });
     }
@@ -315,7 +356,7 @@ public class CopyOfArithmos {
     // EQUALS (special background)
     else if (text.equals("=")) {
         button.setBackground(currentTheme.equalsColor);
-        button.setForeground(Color.BLACK);
+        button.setForeground(currentTheme.bgColor);
     }
 
     // C & CE (foreground only changes)
@@ -339,7 +380,7 @@ public class CopyOfArithmos {
             isDegreeMode = !isDegreeMode;
             if (modeLabel != null) {
                 modeLabel.setText(isDegreeMode ? "DEG " : "RAD ");
-                modeLabel.setForeground(isDegreeMode ? new Color(230, 136, 136) : new Color(97, 120, 195));
+                modeLabel.setForeground(isDegreeMode ? currentTheme.clearColor : currentTheme.memoryDegColor);
             }
         });
         return button;
@@ -390,7 +431,7 @@ public class CopyOfArithmos {
         // 4. MEMORY & SPECIAL COMMANDS
         if (text.equals("M+")) { memory += evaluateExpression(cur, 0); return; }
         if (text.equals("M-")) { memory -= evaluateExpression(cur, 0); return; }
-        if (text.equals("MR")) { updateDisplay("" + memory); return; }
+        if (text.equals("MR")) { updateDisplay(cur + memory); return; }
         if (text.equals("MC")) { memory = 0; return; }
         if (text.equals("Ans")) { updateDisplay(cur + lastAnswer); return; }
 
@@ -405,9 +446,10 @@ public class CopyOfArithmos {
     "sinh", "cosh", "tanh",
     "asinh", "acosh", "atanh",
     "coth", "sech", "csch",
-    "lim", "Tang", "Shade",
+    "acoth", "assech", "acsch",
+    "lim", "tang", "shade", "grf", "perp", "cont", "vect",
     "abs", "ceil", "floor", "round",
-    "max", "min", "mod", "rand",
+    "max", "min", "mod",
     "nCr", "nPr", "stdev", "stdevp", "mean"
     );
 
@@ -438,8 +480,8 @@ public class CopyOfArithmos {
     try {
     double result = evaluateExpression(nextString, 0);
     
-    if (!cur.contains("∫") && 
-    !cur.contains("d/dx") && 
+    if (!cur.contains("int(") && 
+    !cur.contains("diff(") && 
     !cur.contains("x")) {
 
     if (!nextString.equals(formatCoeff(result))) {
@@ -479,46 +521,187 @@ public class CopyOfArithmos {
             return; 
         }
 
-        if (input.startsWith("tang(") || input.startsWith("tangent(")) {
-            String math = raw.substring(raw.indexOf("(") + 1, raw.lastIndexOf(")")).trim();
-            if (canvas != null) {
-                EquationEntry en = new EquationEntry(math, graphColors[colorIndex++ % graphColors.length]);
-                canvas.entries.add(en);
-                canvas.setTangentMode(true, math);
-                canvas.repaint();
-            }
-            display.setText("Check Graph");
+        if (input.startsWith("tang(")) {
+    try {
+        // Extract content between tang( and )
+        String content = raw.substring(raw.indexOf("(") + 1, raw.lastIndexOf(")")).trim();
+        String[] parts = content.split(",");
+        
+        String math = parts[0].trim();
+        double xTarget = Double.parseDouble(parts[1].trim());
+
+        if (canvas != null && model != null) {
+            EquationEntry en = new EquationEntry(math, graphColors[colorIndex++ % graphColors.length]);
+            isTangent = true;
+            tangX = xTarget;
+
+            canvas.entries.add(en);
+            model.addElement(en);
+            canvas.repaint();
+            
+            display.setText("Tangent Applied at x=" + xTarget);
             tabbedPane.setSelectedIndex(5);
             return;
         }
-
-        // --- B. CALCULUS (LIMITS, DERIVATIVES, INTEGRALS) ---
-        Pattern limDiff = Pattern.compile("lim\\(([^)]+)\\)diff\\((.+)\\)");
-        Matcher mDiff = limDiff.matcher(input);
+    } catch (Exception ex) {
+        display.setText("Error: Use tang(f(x), x)");
+    }
+    }
         
-        if (mDiff.find()) {
-            double a = evaluateExpression(mDiff.group(1), 0);
-            double res = evaluateExpression(derive(mDiff.group(2)), a);
-            updateDisplay(formatCoeff(res));
-        } 
-        else if ((input.contains("lim(") && (input.contains("int(") || input.contains("∫")))) {
-            Pattern limInt = Pattern.compile("lim\\(([^,]+),([^)]+)\\)int\\((.+)\\)");
-            Matcher mInt = limInt.matcher(input);
-            if (mInt.find()) {
-                double v1 = evaluateExpression(mInt.group(1), 0);
-                double v2 = evaluateExpression(mInt.group(2), 0);
-                String symbolic = integrate(mInt.group(3)).replace("+c", "").replace("+C", "");
-                double res = evaluateExpression(symbolic, Math.max(v1, v2)) - evaluateExpression(symbolic, Math.min(v1, v2));
-                updateDisplay(formatCoeff(res));
-            }
+        if (input.startsWith("line(") || input.startsWith("dist(")) {
+    // Regex to find all numbers (including decimals and negatives)
+    Pattern p = Pattern.compile("-?\\d+(\\.\\d+)?");
+    Matcher m = p.matcher(input);
+    double[] pts = new double[4];
+    int count = 0;
+    while (m.find() && count < 4) pts[count++] = Double.parseDouble(m.group());
+    }
+    
+    // 1. Check for the limit command FIRST
+    if (input.startsWith("lim(")) {
+    try {
+        // 1. Get everything between "lim(" and the "shade" keyword
+        // Input: lim(0, 3.14)shade(sin(x))
+        String parts[] = raw.split("shade"); 
+        
+        // 2. Process the Limit Part: "lim(0, 3.14)"
+        String limitContent = parts[0].substring(parts[0].indexOf("(") + 1, parts[0].lastIndexOf(")"));
+        String[] limits = limitContent.split(",");
+        
+        if(limits[0].contains("pi") || limits[0].contains("π")){
+            limits[0] = "3.142";
         }
-        else if (input.startsWith("diff(") || input.startsWith("d/dx")) {
-            updateDisplay(derive(input.substring(5, input.lastIndexOf(")"))));
+        if(limits[0].contains("e")){
+            limits[0] = "2.718";
+        }
+        if(limits[1].contains("pi") || limits[1].contains("π")){
+            limits[1] = "3.142";
+        }
+        if(limits[1].contains("e")){
+            limits[1] = "2.718";
+        }
+        double start = Double.parseDouble(limits[0].trim());
+        double end = Double.parseDouble(limits[1].trim());
+
+        // 3. Process the Math Part: everything inside the second set of parens
+        // parts[1] is "(sin(x))"
+        String mathPart = parts[1].trim();
+        String math = mathPart.substring(mathPart.indexOf("(") + 1, mathPart.lastIndexOf(")"));
+
+        if (canvas != null && model != null) {
+            EquationEntry en = new EquationEntry(math, graphColors[colorIndex++ % graphColors.length]);
+            en.isShaded = true;
+            en.isLimitShade = true;
+            en.limStart = start;
+            en.limEnd = end;
+
+            canvas.entries.add(en);
+            model.addElement(en);
+            canvas.repaint();
+            
+            display.setText("Check Graph"); // Match your original style
+            tabbedPane.setSelectedIndex(5); 
+            return;
+        }
+    } catch (Exception ex) {
+        display.setText("Check Graph");
+        // Print the error to your IDE console so we can see the exact line it fails on
+        ex.printStackTrace(); 
+    }
+    }
+    
+
+    // --- B. CALCULUS (LIMITS, DERIVATIVES, INTEGRALS) ---
+    String calcInput = input.toLowerCase();
+    // 1. THE CALCULUS MASTER CHECK (Checks for 'lim')
+    if (input.toLowerCase().contains("lim(")) {
+    try {
+        String cleanInput = input.toLowerCase().replace(" ", "");
+        
+        // Extract the limit content: lim(0,1) or lim(5)
+        int limStart = cleanInput.indexOf("lim(") + 4;
+        int limEnd = cleanInput.indexOf(")", limStart);
+        String limitStr = cleanInput.substring(limStart, limEnd);
+
+        // --- SUB-ROUTING: Is it an Integral? ---
+        if (cleanInput.contains("int") || cleanInput.contains("∫")) {
+            String[] limits = limitStr.split(",");
+            double a = evaluateExpression(limits[0].trim(), 0);
+            double b = evaluateExpression(limits[1].trim(), 0);
+
+            int intStart = cleanInput.contains("int") ? cleanInput.indexOf("int") + 3 : cleanInput.indexOf("∫") + 1;
+            String math = cleanInput.substring(intStart);
+            if (math.startsWith("(")) math = math.substring(1, math.lastIndexOf(")"));
+            math = math.replace("dx", "");
+
+            String symbolic = integrate(math).replace(" + C", "").trim();
+            double resB = solveAtPoint(symbolic, b);
+            double resA = solveAtPoint(symbolic, a);
+            updateDisplay(formatCoeff(resB - resA));
         } 
-        else if (input.startsWith("int(") || input.startsWith("∫")) {
-            int startIdx = input.startsWith("int(") ? 4 : 1;
-            updateDisplay(integrate(input.substring(startIdx, input.lastIndexOf(")"))));
-        } 
+        // --- SUB-ROUTING: Is it a Derivative? ---
+        else if (cleanInput.contains("diff") || cleanInput.contains("d/dx")) {
+            double c = evaluateExpression(limitStr.trim(), 0);
+            
+            int diffStart = cleanInput.contains("diff") ? cleanInput.indexOf("diff") + 4 : cleanInput.indexOf("d/dx") + 4;
+            String math = cleanInput.substring(diffStart);
+            if (math.startsWith("(")) math = math.substring(1, math.lastIndexOf(")"));
+
+            String symbolic = derive(math).trim();
+            updateDisplay(formatCoeff(solveAtPoint(symbolic, c)));
+        }
+    } catch (Exception e) {
+        updateDisplay("Numeric Calc Error");
+    }
+    }
+
+    // 2. SYMBOLIC DIFFERENTIATION (No 'lim')
+    else if (input.toLowerCase().contains("diff") || input.toLowerCase().contains("d/dx")) {
+    try {
+        String math = input.substring(input.indexOf("(") + 1, input.lastIndexOf(")")).trim();
+        updateDisplay(derive(math));
+    } catch (Exception e) {
+        updateDisplay("Symbolic Diff Error");
+    }
+    }
+
+    // 3. SYMBOLIC INTEGRATION (No 'lim')
+    else if (input.toLowerCase().contains("int") || input.toLowerCase().contains("∫")) {
+    try {
+        String math = "";
+        
+        // Handle cases with or without brackets: int(sin(x)) or int sin(x)
+        if (input.contains("(")) {
+            int start = input.indexOf("(") + 1;
+            // Use lastIndexOf to find the end, but fallback to length if user forgot the closing bracket
+            int end = input.contains(")") ? input.lastIndexOf(")") : input.length();
+            math = input.substring(start, end).trim();
+        } else {
+            // If no bracket, take everything after "int" or "∫"
+            int start = input.toLowerCase().contains("int") ? input.indexOf("int") + 3 : input.indexOf("∫") + 1;
+            math = input.substring(start).trim();
+        }
+
+        // Standardize: remove 'dx' if the user typed it
+        math = math.toLowerCase().replace("dx", "").trim();
+
+        // Call your library
+        String result = integrate(math);
+        
+        // If result is null or empty, provide a fallback
+        if (result == null || result.isEmpty()) {
+            updateDisplay("Unable to integrate");
+        } else {
+            updateDisplay(result);
+        }
+
+    } catch (Exception e) {
+        // This is what you were seeing! Let's make it more descriptive for debugging
+        e.printStackTrace();
+        updateDisplay("Syntax Error");
+    }
+    }
+        
         
         // --- C. STANDARD ARITHMETIC (THE FIX FOR 3+3) ---
         else {
@@ -530,12 +713,76 @@ public class CopyOfArithmos {
         // Final Touch: Clear the live preview after solving
         previewLabel.setText(" ");
 
-    } catch (Exception e) {
-        updateDisplay("Error");
+    
+    }catch (Exception e) {
+        updateDisplay("Check Graph");
     }
     }
     
+    private static double solveAtPoint(String symbolic, double xVal) {
+    // 1. CLEANING
+    // Remove spaces and lowercase everything to prevent match errors
+    String evalStr = symbolic.toLowerCase().replace(" ", "");
+
+    // 2. TRIGONOMETRY LAYER
+    // We solve these manually using Java's Math library before the evaluator sees them
+    if (evalStr.contains("sin(x)")) evalStr = evalStr.replace("sin(x)", "(" + Math.sin(xVal) + ")");
+    if (evalStr.contains("cos(x)")) evalStr = evalStr.replace("cos(x)", "(" + Math.cos(xVal) + ")");
+    if (evalStr.contains("tan(x)")) evalStr = evalStr.replace("tan(x)", "(" + Math.tan(xVal) + ")");
     
+    // Reciprocal Trig
+    if (evalStr.contains("sec(x)")) evalStr = evalStr.replace("sec(x)", "(" + (1.0 / Math.cos(xVal)) + ")");
+    if (evalStr.contains("csc(x)")) evalStr = evalStr.replace("csc(x)", "(" + (1.0 / Math.sin(xVal)) + ")");
+    if (evalStr.contains("cot(x)")) evalStr = evalStr.replace("cot(x)", "(" + (1.0 / Math.tan(xVal)) + ")");
+
+    // 3. HYPERBOLIC LAYER
+    if (evalStr.contains("sinh(x)")) evalStr = evalStr.replace("sinh(x)", "(" + Math.sinh(xVal) + ")");
+    if (evalStr.contains("cosh(x)")) evalStr = evalStr.replace("cosh(x)", "(" + Math.cosh(xVal) + ")");
+    if (evalStr.contains("tanh(x)")) evalStr = evalStr.replace("tanh(x)", "(" + Math.tanh(xVal) + ")");
+
+    // 4. LOGARITHMS & SPECIAL CASES
+    // Handle ln|x| or log(x)
+    if (evalStr.contains("ln|x|") || evalStr.contains("log(x)")) {
+        evalStr = evalStr.replace("ln|x|", "(" + Math.log(Math.abs(xVal)) + ")")
+                         .replace("log(x)", "(" + Math.log(xVal) + ")");
+    }
+
+    // 5. POWERS & CONSTANTS
+    // Replace powers FIRST so we don't accidentally replace the 'x' in 'x^2' early
+    evalStr = evalStr.replace("x^2", "(" + (xVal * xVal) + ")")
+                     .replace("x^3", "(" + (xVal * xVal * xVal) + ")")
+                     .replace("pi", String.valueOf(Math.PI))
+                     .replace("e", String.valueOf(Math.E));
+
+    // 6. VARIABLE INJECTION
+    // Finally, replace all remaining standalone 'x' characters
+    evalStr = evalStr.replace("x", "(" + xVal + ")");
+
+    // 7. FINAL SYNTAX CLEANUP (The "Parser Protectors")
+    // Fix Unary Minus: If it starts with -0.5, make it 0-0.5
+    if (evalStr.startsWith("-")) {
+        evalStr = "0" + evalStr;
+    }
+    
+    // Fix Implicit Multiplication: e.g., "2(6.0)" becomes "2*(6.0)"
+    evalStr = evalStr.replaceAll("(\\d)(\\()", "$1*$2");
+    
+    // Fix Double Negatives: e.g., "0--0.5" becomes "0+0.5"
+    evalStr = evalStr.replace("--", "+");
+
+    // 8. FINAL EVALUATION
+    // Pass the "Number-Only" string to your existing expression evaluator
+    return evaluateExpression(evalStr, xVal);
+    }
+    
+    private static String extractNested(String s) {
+    int start = s.indexOf("(") + 1;
+    int end = s.lastIndexOf(")");
+    if (start > 0 && end > start) {
+        return s.substring(start, end);
+    }
+    return s; // Fallback
+    }
 
     static double evaluateExpression(String expr, double xVal){
         final String mathReadyExpr = expr;
@@ -606,6 +853,8 @@ public class CopyOfArithmos {
                     if (func.equals("c")){return 300000000;}
                     if (func.equals("Na") || func.equals("avogadro")){return 6.02214*Math.pow(10, 23);}
                     if (func.equals("h") || func.equals("planck")){return 6.62607*Math.pow(10, -34);}
+                    if (func.equals("L")){return 0.110001;}
+                    if (func.equals("R")){return 262537412640768743.999;}
                     double arg = eat('(') ? parseExpression() : 0; if(arg != 0) eat(')');
                     switch (func) {
                         case "sin": v = isDegreeMode ? Math.sin(Math.toRadians(arg)) : Math.sin(arg); updateLivePreview(v); break;
@@ -777,7 +1026,41 @@ public class CopyOfArithmos {
                             v = mu((int)arg); break;
                         case "σ":
                             v = sigma((int)arg); break;
-                            
+                        case "sum": 
+                        case "Σ": {
+                            double total = arg; // Start with the first number already parsed
+                            while (eat(',')) {
+                                total += parseExpression(); // Add every subsequent number found after a comma
+                        }
+                        v = total;
+                        } break;
+                        
+                        case "prod":
+                        case "Π": {
+                            double product = arg; // Start with the first number
+                                while (eat(',')) {
+                                    product *= parseExpression(); // Multiply by every subsequent number
+                                }
+                            v = product;
+                            } break;
+                        
+                        case "mean": {
+                            List<Double> mData = new ArrayList<>();
+                            mData.add(arg); 
+                            while (eat(',')) {
+                                mData.add(parseExpression());
+                            }
+                            double mSum = 0;
+                            for (double d : mData) mSum += d;
+                            v = mSum / mData.size();
+                        } break;
+                        case "prime":
+                            if(isPrime((int)arg) == true){
+                                updateDisplay("true");
+                            }
+                            else if(isPrime((int)arg) == false){
+                                updateDisplay("false");
+                            }
                             
                         default: v = 0;
 
@@ -908,39 +1191,33 @@ public class CopyOfArithmos {
         return sum;
     }
 
-    // 10. Summation (Σ)
-    public static double sum(int start, int end, DoubleUnaryOperator f) {
-        double total = 0;
-        for (int i = start; i <= end; i++) {
-            total += f.applyAsDouble(i);
-        }
-        return total;
-    }
-
-    // 10b. Product: Π f(i) from start to end
-    public static double prod(int start, int end, DoubleUnaryOperator f) {
-        double result = 1.0;
-        for (int i = start; i <= end; i++) {
-            result *= f.applyAsDouble(i);
-        }
-        return result;
-    }
-
-    // 11. Arithmetic Mean
-    public static double arithmeticMean(double[] values) {
-        if (values.length == 0) return 0;
-        double sum = 0;
-        for (double v : values) sum += v;
-        return sum / values.length;
+    // --- HELPER TO CONVERT USER INPUT TO ARRAY ---
+    public static double[] parseUserSet(String input) {
+        // Removes any brackets if the user typed [1, 56, 32]
+        String clean = input.replaceAll("[\\[\\](){}]", "");
+        
+        // Split by comma or space
+        String[] parts = clean.split("[,\\s]+");
+        
+        return Arrays.stream(parts)
+                     .mapToDouble(Double::parseDouble)
+                     .toArray();
     }
 
     // Helper: Prime check for π(x)
     private static boolean isPrime(int n) {
-        if (n < 2) return false;
-        for (int i = 2; i * i <= n; i++) {
-            if (n % i == 0) return false;
+        int c = 0;
+        for(int i = 1; i <= n; i++){
+            if(n % i == 0){
+                c++;
+            }
         }
-        return true;
+        if(c == 2){
+            return true;
+        }
+        else{
+            return false;
+        }
     }
 
     static String formatPower(double base, double exponent) {
@@ -971,124 +1248,213 @@ public class CopyOfArithmos {
     return sb.toString();
     }
 
-    public static String derive(String exp) {
-        exp = exp.replaceAll("\\s+", "").toLowerCase(); // Clean input
+    public static String derive(String input) {
+    // 1. Deep Normalization
+    String expr = input.toLowerCase().trim()
+                       .replaceAll("\\s+", "") // Remove spaces
+                       .replaceAll("^d/dx\\(|^diff\\(", "").replaceAll("\\)$", ""); // Strip wrappers
+    
+    if (expr.isEmpty()) return "0";
 
-    // 1. Handle Sum/Difference: (f + g)' = f' + g'
-    if (exp.contains("+") || (exp.contains("-") && !exp.startsWith("-"))) {
-        // Split by + or - but keep the operator using lookahead
-        String[] terms = exp.split("(?=[+-])");
-        StringBuilder sb = new StringBuilder();
-        for (String term : terms) {
-            String d = derive(term);
-            if (!d.equals("0")) {
-                if (sb.length() > 0 && !d.startsWith("-")) sb.append(" + ");
-                sb.append(d);
-            }
+    try {
+        // --- 1. CONSTANTS ---
+        if (expr.matches("-?\\d+(\\.\\d+)?") || expr.equals("pi") || expr.equals("e")) {
+            return "0";
         }
-        return sb.length() == 0 ? "0" : sb.toString();
+
+        // --- 2. THE POWER RULE (ax^n -> (a*n)x^(n-1)) ---
+        Pattern p = Pattern.compile("(-?\\d*\\.?\\d*)x(?:\\^?(-?\\d+\\.?\\d*))?");
+        Matcher m = p.matcher(expr);
+        if (m.matches()) {
+            String coeffStr = m.group(1);
+            String expStr = m.group(2);
+            
+            double a = (coeffStr.isEmpty() || coeffStr.equals("+")) ? 1 : 
+                       (coeffStr.equals("-") ? -1 : Double.parseDouble(coeffStr));
+            
+            if (!expr.contains("x")) return "0"; // Safety check for constants
+            
+            double n = (expStr == null) ? 1 : Double.parseDouble(expStr);
+            if (n == 0) return "0";
+            if (n == 1) return formatCoeff(a);
+            
+            double newA = a * n;
+            double newN = n - 1;
+            
+            String powerPart = (newN == 1) ? "x" : "x^" + formatCoeff(newN);
+            return formatCoeff(newA) + powerPart;
+        }
+
+        // --- 3. EXPONENTIALS & LOGARITHMS ---
+        if (expr.equals("e^x") || expr.equals("exp(x)")) return "e^x";
+        if (expr.equals("ln(x)")) return "1/x";
+        if (expr.matches("\\d+\\^x")) {
+            String base = expr.substring(0, expr.indexOf("^"));
+            return expr + "*ln(" + base + ")";
+        }
+
+        // --- 4. TRIGONOMETRY ---
+        switch (expr) {
+            case "sin(x)": return "cos(x)";
+            case "cos(x)": return "-sin(x)";
+            case "tan(x)": return "sec^2(x)";
+            case "cot(x)": return "-csc^2(x)";
+            case "sec(x)": return "sec(x)tan(x)";
+            case "csc(x)": return "-csc(x)cot(x)";
+        }
+
+        // --- 5. HYPERBOLIC & INVERSE TRIG ---
+        if (expr.equals("sinh(x)")) return "cosh(x)";
+        if (expr.equals("cosh(x)")) return "sinh(x)";
+        if (expr.equals("arcsin(x)")) return "1/sqrt(1-x^2)";
+        if (expr.equals("arccos(x)")) return "-1/sqrt(1-x^2)";
+        if (expr.equals("arctan(x)")) return "1/(1+x^2)";
+
+        // --- 6. THE CHAIN RULE (Internal Multipliers) ---
+        // Handles: sin(5x), e^(2x), cos(ax+b)
+        Pattern comp = Pattern.compile("(sin|cos|tan|exp|e\\^)\\((-?\\d*\\.?\\d*)x([+-]\\d+)?\\)");
+        Matcher cm = comp.matcher(expr);
+        if (cm.find()) {
+            String func = cm.group(1);
+            double k = cm.group(2).isEmpty() ? 1 : 
+                      (cm.group(2).equals("-") ? -1 : Double.parseDouble(cm.group(2)));
+            String inner = cm.group(2) + "x" + (cm.group(3) == null ? "" : cm.group(3));
+            
+            if (func.equals("sin")) return formatCoeff(k) + "cos(" + inner + ")";
+            if (func.equals("cos")) return "-" + formatCoeff(k) + "sin(" + inner + ")";
+            if (func.equals("tan")) return formatCoeff(k) + "sec^2(" + inner + ")";
+            if (func.contains("e") || func.equals("exp")) return formatCoeff(k) + "e^(" + inner + ")";
+        }
+
+        // --- 7. SUM/DIFFERENCE RULE (Recursive) ---
+        if (expr.contains("+") || (expr.contains("-") && !expr.startsWith("-"))) {
+            String[] terms = expr.split("(?=[+-])");
+            StringBuilder sb = new StringBuilder();
+            for (String term : terms) {
+                String cleanTerm = term.startsWith("+") ? term.substring(1) : term;
+                String deriv = derive(cleanTerm).trim();
+                if (!deriv.equals("0")) {
+                    sb.append(term.startsWith("-") ? " - " : " + ").append(deriv);
+                }
+            }
+            String result = sb.toString().trim();
+            if (result.startsWith("+")) result = result.substring(1).trim();
+            return result.isEmpty() ? "0" : result;
+        }
+
+    } catch (Exception e) {
+        return "diff(" + expr + ")"; 
     }
 
-    // 2. Handle Chain Rule for Trig: sin(ax), cos(ax), etc.
-    // Pattern matches: optional coefficient, trig function, inner coefficient, and x
-    Pattern trigPattern = Pattern.compile("([\\d.]*)(sin|cos|tan)\\(([\\d.]*)x\\)");
-    Matcher trigMatcher = trigPattern.matcher(exp);
-    if (trigMatcher.matches()) {
-        double outC = trigMatcher.group(1).isEmpty() ? 1 : Double.parseDouble(trigMatcher.group(1));
-        String func = trigMatcher.group(2);
-        double inC = trigMatcher.group(3).isEmpty() ? 1 : Double.parseDouble(trigMatcher.group(3));
+    return "diff(" + expr + ")"; 
+    }
+
+    public static String integrate(String input) {
+    // 1. Deep Normalization
+    String expr = input.toLowerCase().trim()
+                       .replaceAll("\\s+", "") // Remove all spaces
+                       .replaceAll("dx$", ""); // Remove trailing dx
+    
+    if (expr.isEmpty()) return "";
+
+    try {
+        // --- 1. SPECIAL FUNCTIONS & CONSTANTS ---
+        switch (expr) {
+            case "ln(x)": return "x*ln(x) - x + C";
+            case "log(x)": return "(x*ln(x) - x)/ln(10) + C";
+            case "e^x": case "exp(x)": return "e^x + C";
+            case "1/x": case "x^-1": return "ln|x| + C";
+            case "pi": case "π": return "πx + C";
+            case "e": return "ex + C";
+        }
+
+        // --- 2. ADVANCED TRIGONOMETRY ---
+        // Basic
+        if (expr.equals("sin(x)") || expr.equals("sinx")) return "-cos(x) + C";
+        if (expr.equals("cos(x)") || expr.equals("cosx")) return "sin(x) + C";
+        if (expr.equals("tan(x)") || expr.equals("tanx")) return "ln|sec(x)| + C";
+        if (expr.equals("cot(x)") || expr.equals("cotx")) return "ln|sin(x)| + C";
+        if (expr.equals("sec(x)") || expr.equals("secx")) return "ln|sec(x)+tan(x)| + C";
+        if (expr.equals("csc(x)") || expr.equals("cscx")) return "-ln|csc(x)+cot(x)| + C";
         
-        double newC = outC * inC; // The Chain Rule step: multiply outer by inner
-        
-        if (func.equals("sin")) return formatCoeff(newC) + "cos(" + formatCoeff(inC) + "x)";
-        if (func.equals("cos")) return formatCoeff(-newC) + "sin(" + formatCoeff(inC) + "x)";
-        if (func.equals("tan")) return formatCoeff(newC) + "sec^2(" + formatCoeff(inC) + "x)";
+        // Squares (Identities)
+        if (expr.matches("sec\\^?2\\(x\\)|sec\\(x\\)\\^2")) return "tan(x) + C";
+        if (expr.matches("csc\\^?2\\(x\\)|csc\\(x\\)\\^2")) return "-cot(x) + C";
+        if (expr.equals("sin^2(x)") || expr.equals("sin(x)^2")) return "x/2 - sin(2x)/4 + C";
+        if (expr.equals("cos^2(x)") || expr.equals("cos(x)^2")) return "x/2 + sin(2x)/4 + C";
+
+        // --- 3. HYPERBOLIC FUNCTIONS ---
+        if (expr.equals("sinh(x)")) return "cosh(x) + C";
+        if (expr.equals("cosh(x)")) return "sinh(x) + C";
+        if (expr.equals("tanh(x)")) return "ln(cosh(x)) + C";
+
+        // --- 4. INVERSE TRIG (Standard Integrands) ---
+        if (expr.equals("1/sqrt(1-x^2)")) return "arcsin(x) + C";
+        if (expr.equals("1/(1+x^2)"))     return "arctan(x) + C";
+        if (expr.equals("1/(x*sqrt(x^2-1))")) return "arcsec|x| + C";
+
+        // --- 5. THE ULTIMATE POWER RULE (ax^n) ---
+        // Regex handles: -2.5x^3.1, x, 5, -x^2
+        Pattern p = Pattern.compile("(-?\\d*\\.?\\d*)x(?:\\^?(-?\\d+\\.?\\d*))?");
+        Matcher m = p.matcher(expr);
+        if (m.matches()) {
+            String coeffStr = m.group(1);
+            String expStr = m.group(2);
+            
+            double a = (coeffStr.isEmpty() || coeffStr.equals("+")) ? 1 : 
+                       (coeffStr.equals("-") ? -1 : Double.parseDouble(coeffStr));
+            
+            // If it's a constant (no x), integrate to ax
+            if (!expr.contains("x")) return formatCoeff(a) + "x + C";
+            
+            double n = (expStr == null) ? 1 : Double.parseDouble(expStr);
+
+            if (n == -1) return (a == 1 ? "" : formatCoeff(a)) + "ln|x| + C";
+            
+            double newN = n + 1;
+            return formatCoeff(a / newN) + "x^" + formatCoeff(newN) + " + C";
+        }
+
+        // --- 6. LINEAR COMPOSITES (Internal Chain Rule) ---
+        // Handles: sin(2x), e^(5x), cos(3x+1)
+        Pattern comp = Pattern.compile("(sin|cos|exp|e\\^)\\((-?\\d*\\.?\\d*)x([+-]\\d+)?\\)");
+        Matcher cm = comp.matcher(expr);
+        if (cm.find()) {
+            String func = cm.group(1);
+            double k = cm.group(2).isEmpty() ? 1 : 
+                      (cm.group(2).equals("-") ? -1 : Double.parseDouble(cm.group(2)));
+            String inner = cm.group(2) + "x" + (cm.group(3) == null ? "" : cm.group(3));
+            
+            double invK = 1.0 / k;
+            if (func.equals("sin")) return "-" + formatCoeff(invK) + "cos(" + inner + ") + C";
+            if (func.equals("cos")) return formatCoeff(invK) + "sin(" + inner + ") + C";
+            if (func.contains("e") || func.equals("exp")) return formatCoeff(invK) + "e^(" + inner + ") + C";
+        }
+
+        // --- 7. RECURSIVE SUM RULE ---
+        // Splits by + or - but preserves the sign
+        if (expr.contains("+") || (expr.contains("-") && !expr.startsWith("-"))) {
+            String[] terms = expr.split("(?=[+-])");
+            StringBuilder sb = new StringBuilder();
+            for (String term : terms) {
+                String cleanTerm = term.startsWith("+") ? term.substring(1) : term;
+                String solved = integrate(cleanTerm).replace(" + C", "").trim();
+                sb.append(term.startsWith("+") ? " + " : " ").append(solved);
+            }
+            return sb.toString().trim() + " + C";
+        }
+
+    } catch (Exception e) {
+        return "int(" + expr + ")"; 
     }
 
-    // 3. Handle Power Rule: ax^n
-    Pattern powerPattern = Pattern.compile("([\\d.-]*)x\\^?([\\d.-]*)");
-    Matcher powerMatcher = powerPattern.matcher(exp);
-    if (powerMatcher.matches()) {
-        String aStr = powerMatcher.group(1);
-        double a = (aStr.isEmpty() || aStr.equals("+")) ? 1 : (aStr.equals("-") ? -1 : Double.parseDouble(aStr));
-        
-        String nStr = powerMatcher.group(2);
-        if (nStr.isEmpty()) return formatCoeff(a); // d/dx of ax is a
-
-        double n = Double.parseDouble(nStr);
-        double newA = a * n;
-        double newN = n - 1;
-
-        if (newN == 0) return formatCoeff(newA);
-        if (newN == 1) return formatCoeff(newA) + "x";
-        return formatCoeff(newA) + "x^" + formatCoeff(newN);
+    return "int(" + expr + ")"; 
     }
 
-    return "0";
-    }
-
+    // Helper to keep the output clean
     private static String formatCoeff(double d) {
     if (d == (long) d) return String.format("%d", (long) d);
-    return String.format("%s", d);
-    }  
-
-    public static String integrate(String exp) {
-    exp = exp.replaceAll("\\s+", "").toLowerCase();
-
-    // 1. Handle Sum/Difference: ∫(f + g)dx = ∫f dx + ∫g dx
-    if (exp.contains("+") || (exp.contains("-") && !exp.startsWith("-"))) {
-        String[] terms = exp.split("(?=[+-])");
-        StringBuilder sb = new StringBuilder();
-        for (String term : terms) {
-            String result = integrate(term);
-            // Remove the "+ C" from individual terms to add it once at the end
-            result = result.replace(" + C", ""); 
-            if (!result.equals("0")) {
-                if (sb.length() > 0 && !result.startsWith("-")) sb.append(" + ");
-                sb.append(result);
-            }
-        }
-        return sb.length() == 0 ? "C" : sb.toString() + " + C";
-    }
-
-    // 2. Handle Trig Integrals: ∫sin(ax)dx = -1/a cos(ax)
-    Pattern trigPattern = Pattern.compile("([\\d.]*)(sin|cos|sec\\^2)\\(([\\d.]*)x\\)");
-    Matcher trigMatcher = trigPattern.matcher(exp);
-    if (trigMatcher.matches()) {
-        double outC = trigMatcher.group(1).isEmpty() ? 1 : Double.parseDouble(trigMatcher.group(1));
-        String func = trigMatcher.group(2);
-        double inC = trigMatcher.group(3).isEmpty() ? 1 : Double.parseDouble(trigMatcher.group(3));
-        
-        double newC = outC / inC; // Integration step: divide by inner coefficient
-
-        if (func.equals("sin")) return formatCoeff(-newC) + "cos(" + formatCoeff(inC) + "x) + C";
-        if (func.equals("cos")) return formatCoeff(newC) + "sin(" + formatCoeff(inC) + "x) + C";
-        if (func.equals("sec^2")) return formatCoeff(newC) + "tan(" + formatCoeff(inC) + "x) + C";
-    }
-
-    // 3. Handle Power Rule: ∫ax^n dx = (a/n+1)x^(n+1)
-    Pattern powerPattern = Pattern.compile("([\\d.-]*)x\\^?([\\d.-]*)");
-    Matcher powerMatcher = powerPattern.matcher(exp);
-    if (powerMatcher.matches()) {
-        String aStr = powerMatcher.group(1);
-        double a = (aStr.isEmpty() || aStr.equals("+")) ? 1 : (aStr.equals("-") ? -1 : Double.parseDouble(aStr));
-        
-        String nStr = powerMatcher.group(2);
-        double n = nStr.isEmpty() ? 1 : Double.parseDouble(nStr);
-        
-        double newA = a / (n + 1);
-        double newN = n + 1;
-
-        if (newN == 1) return formatCoeff(newA) + "x + C";
-        return formatCoeff(newA) + "x^" + formatCoeff(newN) + " + C";
-    }
-
-    // 4. Handle Constants: ∫a dx = ax
-    if (exp.matches("[\\d.-]+")) {
-        return exp + "x + C";
-    }
-
-    return "∫" + exp + " dx"; // Fallback if rule not found
+    return String.format("%.3f", d).replaceAll("0*$", "").replaceAll("\\.$", "");
     }
 
     static double derivative(String e, double x) { double h = 1e-6; return (evaluateExpression(e, x+h)-evaluateExpression(e, x))/h; }
@@ -1098,7 +1464,7 @@ public class CopyOfArithmos {
 
     static JPanel createGraphPanel() {
     JPanel main = new JPanel(new BorderLayout());
-    main.setBackground(new Color(25, 25, 25));
+    main.setBackground(currentTheme.bgColor);
     canvas = new GraphCanvas();
     
     main.add(canvas, BorderLayout.CENTER);
@@ -1181,21 +1547,23 @@ public class CopyOfArithmos {
 
     // --- TOP CONTROLS ---
     JPanel top = new JPanel(new BorderLayout(5, 0));
-    top.setBackground(new Color(25, 25, 25));
+    top.setBackground(currentTheme.bgColor);
     top.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
     JTextField input = new JTextField("");
-    input.setBackground(new Color(45, 45, 45));
-    input.setForeground(Color.WHITE);
-    input.setCaretColor(Color.WHITE);
+    input.setBackground(currentTheme.regularButton);
+    input.setForeground(currentTheme.foreground);
+    input.setCaretColor(currentTheme.foreground);
     input.setFont(new Font("Segoe UI", Font.PLAIN, 16));
 
     JPanel rightGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
     rightGroup.setOpaque(false);
-    RoundedButton drawBtn = new RoundedButton("Draw");
-    drawBtn.setBackground(new Color(0, 120, 215));
-    RoundedButton histBtn = new RoundedButton("EQ");
-    histBtn.setForeground(Color.BLACK);
+    JButton drawBtn = new JButton("DRAW");
+    drawBtn.setBackground(currentTheme.functionButton);
+    drawBtn.setForeground(currentTheme.memoryDegColor);
+    JButton histBtn = new JButton("EQ");
+    histBtn.setBackground(currentTheme.functionButton);
+    histBtn.setForeground(currentTheme.foreground);
     rightGroup.add(drawBtn); 
     rightGroup.add(histBtn);
     
@@ -1240,7 +1608,7 @@ public class CopyOfArithmos {
 
     // --- BOTTOM CONTROLS (The Layout Fix) ---
     JPanel bottomContainer = new JPanel(new BorderLayout());
-    bottomContainer.setBackground(new Color(25, 25, 25));
+    bottomContainer.setBackground(currentTheme.bgColor);
     bottomContainer.setBorder(BorderFactory.createEmptyBorder(5, 10, 10, 10));
 
     // Zoom on the left
@@ -1249,7 +1617,7 @@ public class CopyOfArithmos {
     JLabel zoomLabel = new JLabel("Zoom:");
     zoomLabel.setForeground(Color.GRAY);
     JSlider zoomSlider = new JSlider(10, 200, 40);
-    zoomSlider.setBackground(new Color(25, 25, 25));
+    zoomSlider.setBackground(currentTheme.bgColor);
     zoomSlider.setPreferredSize(new Dimension(150, 30));
     zoomPanel.add(zoomLabel);
     zoomPanel.add(zoomSlider);
@@ -1257,10 +1625,12 @@ public class CopyOfArithmos {
     // Buttons on the right
     JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
     btnPanel.setOpaque(false);
-    RoundedButton clearBtn = new RoundedButton("Clear All");
-    clearBtn.setBackground(new Color(180, 50, 50));
-    RoundedButton saveBtn = new RoundedButton("Save Image");
-    saveBtn.setForeground(Color.BLACK);
+    JButton clearBtn = new JButton("CLEAR ALL");
+    clearBtn.setBackground(currentTheme.functionButton);
+    clearBtn.setForeground(currentTheme.clearColor);
+    JButton saveBtn = new JButton("SAVE");
+    saveBtn.setBackground(currentTheme.functionButton);
+    saveBtn.setForeground(currentTheme.memoryDegColor);
     btnPanel.add(clearBtn);
     btnPanel.add(saveBtn);
 
@@ -1274,11 +1644,11 @@ public class CopyOfArithmos {
     main.add(bottomContainer, BorderLayout.SOUTH);
     
     // Inside createGraphPanel()
-    list.setBackground(new Color(25, 25, 25)); // Set the list background
+    list.setBackground(currentTheme.bgColor); // Set the list background
     list.setOpaque(true);
 
     scroll.setPreferredSize(new Dimension(200, 0));
-    scroll.getViewport().setBackground(new Color(25, 25, 25)); // THIS fixes the white background
+    scroll.getViewport().setBackground(currentTheme.bgColor); // THIS fixes the white background
     scroll.setVisible(false);
     scroll.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(50, 50, 50)));
 
@@ -1296,14 +1666,16 @@ public class CopyOfArithmos {
     Color color;
     JTextField editor;
     boolean isShaded = false;
-    
+    public double limStart = Double.NEGATIVE_INFINITY;
+    public double limEnd = Double.POSITIVE_INFINITY;
+    public boolean isLimitShade = false; // To distinguish from regular shade
     public EquationEntry(String text, Color color) {
         this.text = text;
         this.color = color;
         this.editor = new JTextField(text);
-        this.editor.setBackground(new Color(45, 45, 45));
-        this.editor.setForeground(Color.WHITE);
-        this.editor.setCaretColor(Color.WHITE);
+        this.editor.setBackground(currentTheme.regularButton);
+        this.editor.setForeground(currentTheme.foreground);
+        this.editor.setCaretColor(currentTheme.foreground);
         this.editor.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
     }
     }
@@ -1316,16 +1688,47 @@ public class CopyOfArithmos {
         private int offsetX = 0;        
         private int offsetY = 0;    
         private double zoom = 40.0;
-        private Color activePointColor = Color.WHITE;
+        private Color activePointColor = currentTheme.foreground;
         private boolean isOverGraph = false;
         private double mouseWorldX = Double.NaN;
         private String activeEquation = "";
         private String currentEquation = "";
-        private boolean isTangentMode = false;
+        private boolean isTangentMode = true;
         private String tangentExpression = null;
-    
-    public GraphCanvas() { 
-        setBackground(new Color(30, 30, 30)); 
+        public boolean isPerpActive = false;
+        public boolean isTangentActive = true;
+        public String activeMath = "";
+        public double[] distData = null; // Stores {x1, y1, x2, y2, distanceValue}
+        public double mouseX = 0; // The current math-x coordinate of the cursor
+        
+        // PLACE THESE INSIDE YOUR 2D PANEL CLASS
+        private double toValueX(int pixelX) {
+            // Mapping pixel back to math value (e.g., -10 to 10)
+            return (pixelX - getWidth() / 2.0) / (zoomScale / 10.0);
+        }
+
+        private int toPixelY(double yVal) {
+            // Mapping math value to pixel
+            return (int) (getHeight() / 2.0 - yVal * (zoomScale / 10.0));
+        }
+        
+ 
+
+        public void setPerpMode(boolean active, String math) {
+        this.isPerpActive = active;
+        this.activeMath = math;
+        }
+
+        public void setTangentMode(boolean active, String math) {
+        this.isTangentActive = active;
+        this.activeMath = math;
+        }
+
+        public void setDistanceTool(double x1, double y1, double x2, double y2, double d) {
+        this.distData = new double[]{x1, y1, x2, y2, d};
+        }
+        public GraphCanvas() { 
+        setBackground(currentTheme.regularButton); 
         addMouseMotionListener(new MouseMotionAdapter() { 
             public void mouseMoved(MouseEvent e) { 
                 mousePos = e.getPoint(); 
@@ -1452,7 +1855,7 @@ public class CopyOfArithmos {
     int cy = (getHeight() / 2) + offsetY;
 
     // 1. GRID
-    g2.setColor(new Color(50, 50, 50));
+    g2.setColor(currentTheme.functionButton);
     g2.setStroke(new BasicStroke(1.0f));
     for (int x = cx % (int)scale; x < getWidth(); x += (int)scale) {
         g2.drawLine(x, 0, x, getHeight());
@@ -1466,24 +1869,108 @@ public class CopyOfArithmos {
     }
 
     // 2. AXES
-    g2.setColor(new Color(150, 150, 150)); 
+    g2.setColor(currentTheme.foreground); 
     g2.setStroke(new BasicStroke(2.5f));
     g2.drawLine(0, cy, getWidth(), cy);    // Horizontal X-Axis
     g2.drawLine(cx, 0, cx, getHeight());   // Vertical Y-Axis
 
     // 3. SHADING (Draw this BEFORE the lines so the lines stay on top)
     for (EquationEntry en : entries) {
-        if (en.isShaded) {
-            g2.setColor(new Color(en.color.getRed(), en.color.getGreen(), en.color.getBlue(), 50));
-            for (int xP = 0; xP < getWidth(); xP++) {
-                double xM = (double)(xP - cx) / scale;
-                try {
-                    double val = evaluateExpression(en.text, xM);
-                    int yP = cy - (int)(val * scale);
-                    g2.drawLine(xP, cy, xP, yP); // Shade from axis to curve
-                } catch (Exception ex) {}
+    if (en.isShaded) {
+        // Default to full screen
+        int startPix = 0; 
+        int endPix = getWidth();
+
+        // If it's a limit shade, calculate exactly which pixels correspond to the math values
+        if (en.isLimitShade) {
+            // Formula: Pixel = (MathValue * scale) + Center
+            startPix = (int) (en.limStart * scale + cx);
+            endPix = (int) (en.limEnd * scale + cx);
+
+            // Bounds safety: don't try to draw outside the component width
+            startPix = Math.max(0, startPix);
+            endPix = Math.min(getWidth(), endPix);
+        }
+
+        g2.setColor(new Color(en.color.getRed(), en.color.getGreen(), en.color.getBlue(), 50));
+        
+        // Loop ONLY from the start pixel to the end pixel
+        for (int xP = startPix; xP < endPix; xP++) {
+            double xM = (double)(xP - cx) / scale;
+            try {
+                double val = evaluateExpression(en.text, xM);
+                int yP = cy - (int)(val * scale);
+                g2.drawLine(xP, cy, xP, yP); // Shade from axis to curve
+            } catch (Exception ex) {}
+        }
+    }
+    }
+    // Inside 2D Panel's paintComponent
+    for (EquationLayer layer : layers) {
+    if (layer.formula.startsWith("lim(") && layer.formula.endsWith(")shade")) {
+        try {
+            // Extracts "x^2, 0, 5" from "lim(x^2, 0, 5)shade"
+            String content = layer.formula.substring(4, layer.formula.indexOf(")shade"));
+            String[] parts = content.split(",");
+            
+            String expr = parts[0].trim();
+            double startX = Double.parseDouble(parts[1].trim());
+            double endX = Double.parseDouble(parts[2].trim());
+
+            // Set a translucent version of the layer color
+            g2.setColor(new Color(layer.color.getRed(), layer.color.getGreen(), layer.color.getBlue(), 100));
+
+            // Draw the shaded area using vertical strips
+            for (int xPix = 0; xPix <= getWidth(); xPix++) {
+                double xVal = (xPix - getWidth() / 2.0) / (zoomScale / 10.0);
+                
+                // Only shade if within the specified math range
+                if (xVal >= startX && xVal <= endX) {
+                    double yVal = eval(expr, xVal, 0, 0); // Your existing math parser
+                    int yPix = (int) (getHeight() / 2.0 - yVal * (zoomScale / 10.0));
+                    int zeroPix = (int) (getHeight() / 2.0); // The x-axis
+                    
+                    g2.drawLine(xPix, zeroPix, xPix, yPix);
+                }
+            }
+        } catch (Exception ex) {
+            // Silently skip if the user is still typing the command
+        }
+    }
+    }
+    // Inside your 2D Panel's paintComponent method:
+    for (EquationLayer layer : layers) {
+    // Only process if it's a standard graph command
+    if (layer.formula.startsWith("grf ")) {
+        String mathExpression = layer.formula.substring(4); // Removes "grf "
+        g2.setColor(layer.color);
+        g2.setStroke(new BasicStroke(2.0f));
+
+        Path2D.Double path = new Path2D.Double();
+        boolean firstPoint = true;
+
+        for (int xPix = 0; xPix <= getWidth(); xPix++) {
+            // 1. Convert pixel to math X (e.g., -10 to 10)
+            double xVal = (xPix - getWidth() / 2.0) / (zoomScale / 10.0);
+            
+            // 2. Evaluate the math (Passing 0 for y and time)
+            double yVal = eval(mathExpression, xVal, 0, 0);
+
+            // 3. Convert math Y back to pixel
+            int yPix = (int) (getHeight() / 2.0 - yVal * (zoomScale / 10.0));
+
+            if (firstPoint) {
+                path.moveTo(xPix, yPix);
+                firstPoint = false;
+            } else {
+                // Prevent lines from jumping across the screen on vertical asymptotes
+                if (Math.abs(yPix) < 10000) { 
+                    path.lineTo(xPix, yPix);
+                }
             }
         }
+        g2.draw(path);
+    }
     }
 
     // 4. EQUATION LINES
@@ -1509,7 +1996,7 @@ public class CopyOfArithmos {
         for (int xP = 0; xP < getWidth(); xP++) {
             double xM = (double)(xP - cx) / scale;
             try {
-                double val = CopyOfArithmos.evaluateExpression(en.text, xM);
+                double val = Arithmos.evaluateExpression(en.text, xM);
                 int yP = cy - (int)(val * scale);
                 if (prevX != -1 && Math.abs(yP) < 5000 && Math.abs(prevY) < 5000) {
                     g2.drawLine(prevX, prevY, xP, yP);
@@ -1526,6 +2013,9 @@ public class CopyOfArithmos {
         g2.setStroke(new BasicStroke(2.0f));
         drawTangentLine(g2, tangentExpression);
     }
+    
+    // Inside the 2D Panel's paintComponent loop:
+    
 
     // 6. MOUSE INTERACTION / COORDINATES
     if (isOverGraph && mousePos != null) {
@@ -1540,7 +2030,7 @@ public class CopyOfArithmos {
         g2.setColor(new Color(0, 0, 0, 180));
         g2.fillRect(mousePos.x + 10, mousePos.y - 25, 110, 20); 
         
-        g2.setColor(Color.WHITE);
+        g2.setColor(currentTheme.foreground);
         g2.setFont(new Font("Segoe UI", Font.BOLD, 13));
         g2.drawString(String.format("(%.2f, %.2f)", xMath, yMath), mousePos.x + 12, mousePos.y - 10);
 
@@ -1566,7 +2056,7 @@ public class CopyOfArithmos {
                 double area = 0;
                 double step = 0.01;
                 for (double i = 0; i < Math.abs(xMath); i += step) {
-                    area += Math.abs(CopyOfArithmos.evaluateExpression(entry.text, i)) * step;
+                    area += Math.abs(Arithmos.evaluateExpression(entry.text, i)) * step;
                 }
 
                 // Display the Integral Tooltip
@@ -1579,18 +2069,13 @@ public class CopyOfArithmos {
         }
     }
     }
-    public void setTangentMode(boolean active, String eq) {
-    this.isTangentMode = active;
-    this.tangentExpression = eq;
-    repaint();
-    }
     private void drawTangentLine(Graphics2D g2, String expr) {
     // If mouse is off-screen, default to 0, otherwise use mouse position
     double x0 = Double.isNaN(mouseWorldX) ? 0 : mouseWorldX; 
     
-    double y0 = CopyOfArithmos.evaluateExpression(expr, x0);
+    double y0 = Arithmos.evaluateExpression(expr, x0);
     double h = 0.0001;
-    double slope = (CopyOfArithmos.evaluateExpression(expr, x0 + h) - y0) / h;
+    double slope = (Arithmos.evaluateExpression(expr, x0 + h) - y0) / h;
 
     // Extend the line far enough to cover the screen
     double xStart = x0 - 20; 
@@ -1606,11 +2091,7 @@ public class CopyOfArithmos {
     return (int) (getWidth() / 2.0 + (x * zoom) + offsetX);
     }
 
-    private int toPixelY(double y) {
-    // Center of screen - (math coordinate * zoom level) + vertical drag offset
-    // (We subtract because in Java, Y-pixels increase as you go DOWN)
-    return (int) (getHeight() / 2.0 - (y * zoom) + offsetY);
-    }
+   
     private void drawSmoothHyperbola(Graphics2D g2, double c, int cx, int cy) {
     int prevX = -1, prevY = -1;
 
@@ -1649,8 +2130,8 @@ public class CopyOfArithmos {
                 String leftSide = parts[0].replace("x", "(" + xM + ")").replace("y", "(" + yM + ")");
                 String rightSide = parts[1].replace("x", "(" + xM + ")").replace("y", "(" + yM + ")");
                 
-                double leftVal = CopyOfArithmos.evaluateExpression(leftSide, 0);
-                double rightVal = CopyOfArithmos.evaluateExpression(rightSide, 0);
+                double leftVal = Arithmos.evaluateExpression(leftSide, 0);
+                double rightVal = Arithmos.evaluateExpression(rightSide, 0);
                 
                 // If the difference is tiny, we found a point on the curve
                 if (Math.abs(leftVal - rightVal) < 0.15) {
@@ -1668,8 +2149,8 @@ public class CopyOfArithmos {
     static JTextField createDimInput(String def) {
         JTextField tf = new JTextField(def, 2);
         tf.setBackground(new Color(18, 18, 18)); // Matches the deep dark background
-        tf.setForeground(Color.WHITE);
-        tf.setCaretColor(Color.WHITE);
+        tf.setForeground(currentTheme.foreground);
+        tf.setCaretColor(currentTheme.foreground);
         tf.setHorizontalAlignment(JTextField.CENTER);
         tf.setFont(new Font("Segoe UI", Font.BOLD, 14));
         tf.setBorder(null); // Removes the box so it sits cleanly inside your [ ] labels
@@ -1683,7 +2164,7 @@ public class CopyOfArithmos {
             setContentAreaFilled(false);
             setFocusPainted(false);
             setBorderPainted(false);
-            setForeground(Color.WHITE);
+            setForeground(currentTheme.foreground);
             setFont(new Font("Segoe UI", Font.BOLD, 14));
         }
 
@@ -1705,22 +2186,23 @@ public class CopyOfArithmos {
 
     static JPanel createMatrixPanel() {
     JPanel main = new JPanel(new BorderLayout());
-    main.setBackground(new Color(25, 25, 25)); // Dark theme
+    main.setBackground(currentTheme.bgColor); // Dark theme
 
     // --- TOP: Dimension Controls ---
     JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
     topPanel.setOpaque(false);
     
-    JLabel lblA = new JLabel("Matrix A:"); lblA.setForeground(Color.WHITE);
+    JLabel lblA = new JLabel("Matrix A:"); lblA.setForeground(currentTheme.foreground);
     JTextField rAField = new JTextField("2", 2); 
     JTextField cAField = new JTextField("2", 2);
     
-    JLabel lblB = new JLabel("Matrix B:"); lblB.setForeground(Color.WHITE);
+    JLabel lblB = new JLabel("Matrix B:"); lblB.setForeground(currentTheme.foreground);
     JTextField rBField = new JTextField("2", 2); 
     JTextField cBField = new JTextField("2", 2);
     
-    RoundedButton setBtn = new RoundedButton("Set Grid");
-    setBtn.setBackground(new Color(0, 120, 215)); 
+    JButton setBtn = new JButton("Set Grid");
+    setBtn.setBackground(currentTheme.functionButton);
+    setBtn.setForeground(currentTheme.foreground);
 
     topPanel.add(lblA); topPanel.add(rAField); topPanel.add(new JLabel("x")); topPanel.add(cAField);
     topPanel.add(new JLabel("    ")); 
@@ -1742,15 +2224,19 @@ public class CopyOfArithmos {
     gridContainer.add(panelB);
 
     // --- BUTTONS SETUP ---
-    RoundedButton addBtn = new RoundedButton("A + B");
-    RoundedButton subBtn = new RoundedButton("A - B");
-    RoundedButton mulBtn = new RoundedButton("A × B");
-    RoundedButton clearBtn = new RoundedButton("Clear");
+    JButton addBtn = new JButton("A + B");
+    JButton subBtn = new JButton("A - B");
+    JButton mulBtn = new JButton("A × B");
+    JButton clearBtn = new JButton("Clear");
 
-    addBtn.setBackground(new Color(255, 140, 0));
-    subBtn.setBackground(new Color(255, 140, 0));
-    mulBtn.setBackground(new Color(255, 140, 0));
-    clearBtn.setBackground(new Color(180, 50, 50));
+    addBtn.setBackground(currentTheme.memoryDegColor);
+    addBtn.setForeground(currentTheme.bgColor);
+    subBtn.setBackground(currentTheme.memoryDegColor);
+    subBtn.setForeground(currentTheme.bgColor);
+    mulBtn.setBackground(currentTheme.memoryDegColor);
+    mulBtn.setForeground(currentTheme.bgColor);
+    clearBtn.setBackground(currentTheme.functionButton);
+    clearBtn.setForeground(currentTheme.clearColor);
 
     // --- LOGIC: Building the Grids ---
     setBtn.addActionListener(e -> {
@@ -1767,9 +2253,9 @@ public class CopyOfArithmos {
             for (int i = 0; i < rowsA * colsA; i++) {
                 JTextField f = new JTextField("0");
                 f.setHorizontalAlignment(JTextField.CENTER);
-                f.setBackground(new Color(45, 45, 45));
-                f.setForeground(Color.WHITE);
-                f.setCaretColor(Color.WHITE);
+                f.setBackground(currentTheme.regularButton);
+                f.setForeground(currentTheme.foreground);
+                f.setCaretColor(currentTheme.foreground);
                 f.setBorder(BorderFactory.createLineBorder(new Color(70, 70, 70)));
                 matrixAFields.add(f);
                 panelA.add(f);
@@ -1782,9 +2268,9 @@ public class CopyOfArithmos {
             for (int i = 0; i < rowsB * colsB; i++) {
                 JTextField f = new JTextField("0");
                 f.setHorizontalAlignment(JTextField.CENTER);
-                f.setBackground(new Color(45, 45, 45));
-                f.setForeground(Color.WHITE);
-                f.setCaretColor(Color.WHITE);
+                f.setBackground(currentTheme.regularButton);
+                f.setForeground(currentTheme.foreground);
+                f.setCaretColor(currentTheme.foreground);
                 f.setBorder(BorderFactory.createLineBorder(new Color(70, 70, 70)));
                 matrixBFields.add(f);
                 panelB.add(f);
@@ -1911,7 +2397,7 @@ public class CopyOfArithmos {
     }
 
     static JPanel createBasicPanel() {
-        JPanel p = new JPanel(new GridLayout(6,4,10,10)); p.setBackground(new Color(30,30,30)); 
+        JPanel p = new JPanel(new GridLayout(6,4,10,10)); p.setBackground(currentTheme.bgColor); 
         String[] b = {"M+","M-","MR","MC","7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"};
         for (String text : b) {
             JButton btn = createButton(text); // Use your createButton helper
@@ -1920,144 +2406,263 @@ public class CopyOfArithmos {
     }
 
     static JPanel createScientificPanel() {
-        JPanel p = new JPanel(new GridLayout(8,4,10,10)); p.setBackground(new Color(30,30,30));
+        JPanel p = new JPanel(new GridLayout(8,4,10,10)); p.setBackground(currentTheme.bgColor);
         String[] b = {"M+","M-","MR","MC","sin","cos","tan","π","log", "ln", "e", "^", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","DEG","√"};
         for(String s : b) p.add(createButton(s)); return p;
     }
 
     static JPanel createAdvancedPanel() {
-        JPanel p = new JPanel(new GridLayout(10,4,10,10)); p.setBackground(new Color(30,30,30));
-        String[] b = {"M+","M-","MR","MC","sinh","cosh","tanh","π","asinh","acosh","atanh","e","coth", "sech", "csch", "ln", "coth", "sech", "csch", "^", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","DEG","√"};
+        JPanel p = new JPanel(new GridLayout(10,4,10,10)); p.setBackground(currentTheme.bgColor);
+        String[] b = {"M+","M-","MR","MC","sinh","cosh","tanh","π","asinh","acosh","atanh","e","coth", "sech", "csch", "ln", "acoth", "asech", "acsch", "^", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","DEG","√"};
         for(String s : b) p.add(createButton(s)); return p;
     }
     
     static JPanel createTrigPanel(){
-        JPanel p = new JPanel(new GridLayout(10, 4, 10, 10)); p.setBackground(new Color(30, 30, 30));
-        String[] b = {"M+", "M-", "MR", "MC", "sin", "cos", "tan", "π", "asin", "acos", "atan", "e", "cot", "sec", "csc", ")", "acot", "asec", "acsc", "^", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","DEG","√"};
+        JPanel p = new JPanel(new GridLayout(10, 4, 10, 10)); p.setBackground(currentTheme.bgColor);
+        String[] b = {"M+", "M-", "MR", "MC", "sin", "cos", "tan", "π", "asin", "acos", "atan", "(", "cot", "sec", "csc", ")", "acot", "asec", "acsc", "^", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","DEG","√"};
         for(String s : b) p.add(createButton(s)); 
         return p;
     }
     
     static JPanel createFuncPanel(){
-        JPanel p = new JPanel(new GridLayout(9, 4, 10, 10)); p.setBackground(new Color(30, 30, 30));
-        String[] b = {"M+", "M-", "MR", "MC", "sgn", "Γ", "ζ", "erf", "W", "Σ", "Φ", "Π", "μ", "σ", "prime", "^","7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","DEG","√"};
+        JPanel p = new JPanel(new GridLayout(9, 4, 10, 10)); p.setBackground(currentTheme.bgColor);
+        String[] b = {"M+", "M-", "MR", "MC", "sgn", "Γ", "ζ", "erf", "W", "Σ", "Φ", "Π", "μ", "σ", "!", ",","7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"};
         for(String s : b) p.add(createButton(s)); 
         return p;
     }
     
     static JPanel createConstantPanel(){
-        JPanel p = new JPanel(new GridLayout(8, 4, 20, 10)); p.setBackground(new Color(30, 30, 30));
-        String[] b = {"M+", "M-", "MR", "MC","π", "e", "γ", "φ", "ρ", "δ", "δs", "G", "K", "A", "E", "Ω", "i", "j", "ε", "c", "Na", "h", "Ca", "M", "ω", "ζa", "D", "τ", "C", "CE", "DEG", "="};
+        JPanel p = new JPanel(new GridLayout(8, 4, 20, 10)); p.setBackground(currentTheme.bgColor);
+        String[] b = {"M+", "M-", "MR", "MC","π", "e", "γ", "φ", "ρ", "δ", "δs", "G", "K", "A", "E", "Ω", "i", "R", "L", "c", "Na", "h", "Ca", "M", "ω", "ζa", "D", "τ", "C", "CE", "DEG", "="};
         for(String s : b) p.add(createButton(s)); 
         return p;
     }
     
-    static JPanel createCalculus1Panel() {
+    static JPanel createCalculusPanel() {
     JPanel p = new JPanel(new GridLayout(10, 4, 10, 10)); 
-    p.setBackground(new Color(30, 30, 30));
+    p.setBackground(currentTheme.bgColor);
     
-    String[] b = {"M+", "M-", "MR", "MC", "x", "d/dx", "d²/dx²", "∫", "lim", "e", "π", "W", "!", "(", ")", "Γ", "sin", "cos", "tan", "ln", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"};
+    String[] b = {"M+", "M-", "MR", "MC", "x", "d/dx", "d²/dx²", "∫", "lim", "e", "π", ",", "!", "(", ")", "log", "sin", "cos", "tan", "ln", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"};
     for(String s : b) p.add(createButton(s));
     return p;
     }
     
-    static JPanel createCalculus2Panel() {
-    JPanel p = new JPanel(new GridLayout(10, 4, 10, 10)); 
-    p.setBackground(new Color(30, 30, 30));
+    static JPanel createFunctionPanel() {
+    JPanel p = new JPanel(new GridLayout(11, 4, 10, 10)); 
+    p.setBackground(currentTheme.bgColor);
     
-    String[] b = {"M+", "M-", "MR", "MC", "x", "d/dx", "d²/dx²", "∫", "lim", "e", "π", "Tang", "!", "(", ")", "Shade", "sin", "cos", "tan", "ln", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"};
-    for(String s : b){
-        JButton btn = createButton(s); 
+    String[] b = {"M+", "M-", "MR", "MC", "x", "y", "grf", "3Dgrf", "lim", "tang", "shade", "perp", "line", "dist", "cont", "vect", "(", ")", "π", ",", "sin", "cos", "tan", "ln", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"};
+    for(String s : b) {
+    JButton btn = createButton(s); 
     p.add(btn);
-    
-    if (s.equals("Tang")) {
-    // 1. REMOVE the default "print 'Tan' to screen" behavior
-    for (ActionListener al : btn.getActionListeners()) {
-        btn.removeActionListener(al);
-    }
 
-    // 2. ADD the custom "Tan(current_text)" behavior
-    btn.addActionListener(e -> {
-        String current = display.getText().trim();
-        // If screen is empty, just show "Tan("
-        if (current.isEmpty()) {
-            display.setText("Tang(");
-        } else {
-            // If there's already math, wrap it: "Tan(x^2)"
-            display.setText("Tang(" + current + ")");
+    if (s.equals("Tang") || s.equals("Shade")) {
+        // Remove the default "append text" listener
+        for (ActionListener al : btn.getActionListeners()) {
+            btn.removeActionListener(al);
         }
-        
-        // This makes sure the cursor is ready for the next input
+
+        btn.addActionListener(e -> {
+            String current = display.getText().trim();
+            // IMPORTANT: Use lowercase to match your processEqualCommand checks!
+            String funcName = s.toLowerCase(); 
+            
+            if (current.isEmpty()) {
+                display.setText(funcName + "(");
+            } else {
+                display.setText(funcName + "(" + current + ")");
+            }
+            display.requestFocusInWindow();
+        });
+    }
+    // Inside your createFunctionPanel for loop
+    if (s.equals("line") || s.equals("dist")) {
+    for (ActionListener al : btn.getActionListeners()) btn.removeActionListener(al);
+    btn.addActionListener(e -> {
+        display.setText(s.toLowerCase() + "(( , ),( , ))");
+        // Set caret position between the first coordinates for convenience
+        display.requestFocusInWindow();
+    });
+    } else if (s.equals("grf") || s.equals("3Dgrf")) {
+    for (ActionListener al : btn.getActionListeners()) btn.removeActionListener(al);
+    btn.addActionListener(e -> {
+        display.setText(s.toLowerCase() + "(" + display.getText().trim() + ")");
         display.requestFocusInWindow();
     });
     }
     }
     return p;
     }
+
     
-    static JPanel createStatisticsPanel(){
+    static JPanel createStatPanel(){
     JPanel p = new JPanel(new GridLayout(10, 4, 10, 10));
-    p.setBackground(new Color(30, 30, 30));
+    p.setBackground(currentTheme.bgColor);
     
     String[] b = {"M+", "M-", "MR", "MC", "abs", "ceil", "floor", "round", "max", "min", "mod", "rand", "nCr", "nPr", "stdev", "stdevp", "Σ", "mean", "%", ",", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"};
     for(String s : b) p.add(createButton(s));
     return p;
     }
+    
+    static JPanel createCheckPanel(){
+        JPanel p = new JPanel(new GridLayout(10, 4, 10, 10));
+        p.setBackground(currentTheme.bgColor);
+        String[] b = {"M+", "M-", "MR", "MC", "prime", "comp", "mark", "arms", "nvn", "kapr", "paln", "auto", "fib", "sqr", "cub", "mnch", "hpy", "spl", "perf", ")", "7","8","9","÷","4","5","6","×","1","2","3","-",".","0","=","+","C","CE","√","^"}; 
+        for(String s : b)p.add(createButton(s));
+        return p;
+    }
+    // PLACE THIS IN YOUR MAIN CLASS
+    private static void handleContourCommand(String cmd) {
+    try {
+        // Extracts "x^2+y^2" and "5" from "cont(x^2+y^2, 5)"
+        String content = cmd.substring(cmd.indexOf("(") + 1, cmd.lastIndexOf(")"));
+        String[] parts = content.split(",");
+        
+        String extractedExpr = parts[0].trim();
+        double extractedZ = Double.parseDouble(parts[1].trim());
+
+        // Now 'contourPanel' is recognized!
+        contourPanel.updateData(extractedExpr, extractedZ);
+        contourPanel.repaint();
+        
+        // Optional: If this panel is in a separate window, make it visible here
+    } catch (Exception e) {
+        System.out.println("Format error! Use: cont(formula, z)");
+    }
+    }
+    private static double solveAtPoint3D(String math, double x, double y) {
+    String evalStr = math.toLowerCase().replace(" ", "")
+        .replace("x", "(" + x + ")")
+        .replace("y", "(" + y + ")");
+    // Standard replacements for sin, cos, etc. same as solveAtPoint
+    return evaluateExpression(evalStr, 0); 
+    }
+    // PLACE THIS IN YOUR MAIN CLASS
+    private static void add2DLayer(String input, Color color) {
+    // This connects to your 2D layers list. 
+    // Assuming your 2D list is just called 'layers' or similar:
+    layers.add(new EquationLayer(input, color));
+    // Trigger a repaint on your 2D panel here if it's a different variable
+    }   
+    private static double map(double value, double start1, double stop1, double start2, double stop2) {
+    return start2 + (stop2 - start2) * ((value - start1) / (stop1 - start1));
+    }
+    private static Color getContourColor(double z) {
+    // Clamp z between -1 and 1
+    float hue = (float) map(z, -1, 1, 0.6f, 0.0f); // Blue (0.6) to Red (0.0)
+    return Color.getHSBColor(hue, 0.8f, 0.9f);
+    }
+    static JPanel createContourPanel(String equation) {
+    return new JPanel() {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            for (int i = 0; i < getWidth(); i++) {
+                for (int j = 0; j < getHeight(); j++) {
+                    double x = map(i, 0, getWidth(), -6, 6);
+                    double y = map(j, 0, getHeight(), -1, 1);
+                    
+                    // Evaluate z = f(x, y)
+                    double z = solveAtPoint3D(equation, x, y); 
+                    
+                    // Map Z (-1 to 1) to a Color Gradient (Blue -> Orange -> White)
+                    g.setColor(getContourColor(z));
+                    g.drawLine(i, j, i, j);
+                }
+            }
+        }
+    };
+    }
+    private static double[] parseArgs(String cmd) {
+    try {
+        // This regex finds everything between ( and )
+        String content = cmd.substring(cmd.indexOf("(") + 1, cmd.indexOf(")"));
+        String[] parts = content.split(",");
+        double[] args = new double[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            args[i] = Double.parseDouble(parts[i].trim());
+        }
+        return args;
+    } catch (Exception e) {
+        return new double[0]; // Return empty if format is wrong
+    }
+    }
     static JPanel createAlphaPanel() {
     JPanel main = new JPanel(new BorderLayout());
-    main.setBackground(new Color(25, 25, 25));
+    main.setBackground(currentTheme.bgColor);
 
+    // --- Tab Styling ---
+    UIManager.put("TabbedPane.selected", currentTheme.regularButton);
+    UIManager.put("TabbedPane.contentAreaColor", currentTheme.regularButton);
+    
     JTabbedPane alphaTabs = new JTabbedPane();
+    alphaTabs.setForeground(currentTheme.foreground);
+    alphaTabs.setBackground(currentTheme.bgColor);
     
-    // --- C and CE Buttons (Should be Red) ---
-    RoundedButton clearAlphaBtn = new RoundedButton("C");
-    clearAlphaBtn.setBackground(new Color(180, 50, 50)); // Deep Red
-    clearAlphaBtn.setForeground(Color.WHITE);
+    // --- Functional Control Buttons ---
+    JButton clearAlphaBtn = createButton("C");
+    clearAlphaBtn.setBackground(currentTheme.functionButton); 
+    clearAlphaBtn.setForeground(currentTheme.clearColor);
 
-    RoundedButton backAlphaBtn = new RoundedButton("CE");
-    backAlphaBtn.setBackground(new Color(180, 50, 50)); // Deep Red
-    backAlphaBtn.setForeground(Color.WHITE);
+    JButton backAlphaBtn = createButton("CE");
+    backAlphaBtn.setBackground(currentTheme.functionButton);
+    backAlphaBtn.setForeground(currentTheme.clearColor);
 
-    // --- Shift Button (Should be Blue) ---
-    RoundedButton shiftBtn = new RoundedButton("UPPERCASE / lowercase");
-    shiftBtn.setBackground(new Color(0, 120, 215)); // Windows Blue
-    shiftBtn.setForeground(Color.WHITE);
+    JButton shiftBtn = createButton("UPPERCASE / lowercase");
+    shiftBtn.setBackground(currentTheme.functionButton);
+    shiftBtn.setForeground(currentTheme.memoryDegColor);
     
-    // --- 1. English Panel ---
-    JPanel englishPanel = new JPanel(new GridLayout(0, 7, 5, 5));
-    englishPanel.setBackground(new Color(25, 25, 25));
+    for (ActionListener al : shiftBtn.getActionListeners()) shiftBtn.removeActionListener(al);
+    for (ActionListener al : clearAlphaBtn.getActionListeners()) clearAlphaBtn.removeActionListener(al);
+    for (ActionListener al : backAlphaBtn.getActionListeners()) backAlphaBtn.removeActionListener(al);
+    
+    // --- 1. Latin (English) Panel ---
+    JPanel englishPanel = new JPanel(new GridLayout(0, 7, 2, 2));
+    englishPanel.setBackground(currentTheme.regularButton);
     String[] alphabet = "abcdefghijklmnopqrstuvwxyz".split("");
     for (String s : alphabet) {
-        RoundedButton btn = createSymbolButton(s);
-        alphaButtons.add(btn);
-        englishPanel.add(btn);
+        JButton button = createButton(s); // Updated identifier
+        for (ActionListener al : button.getActionListeners()) button.removeActionListener(al);
+        
+        // Add dynamic listener that reads the CURRENT label (A vs a)
+        button.addActionListener(e -> {
+            updateDisplay(display.getText() + button.getText());
+            display.requestFocusInWindow();
+        });
+        alphaButtons.add(button);
+        englishPanel.add(button);
     }
 
     // --- 2. Greek Panel ---
-    JPanel greekPanel = new JPanel(new GridLayout(0, 6, 5, 5));
-    greekPanel.setBackground(new Color(25, 25, 25));
-    String[] greek = "αβγδεζηθικλμνξοπρστυφχψω".split("");
-    for (String g : greek) {
-        RoundedButton btn = createSymbolButton(g);
-        greekButtons.add(btn);
-        greekPanel.add(btn);
+    JPanel greekPanel = new JPanel(new GridLayout(0, 6, 2, 2));
+    greekPanel.setBackground(currentTheme.regularButton);
+    String[] greekChars = "αβγδεζηθικλμνξοπρστυφχψω".split("");
+    for (String g : greekChars) {
+        JButton button = createButton(g); // Updated identifier
+        for (ActionListener al : button.getActionListeners()) button.removeActionListener(al);
+        
+        // Add dynamic listener
+        button.addActionListener(e -> {
+            updateDisplay(display.getText() + button.getText());
+            display.requestFocusInWindow();
+        });
+        greekButtons.add(button);
+        greekPanel.add(button);
     }
 
     alphaTabs.addTab("Latin", englishPanel);
     alphaTabs.addTab("ελληνικά", greekPanel);
 
-    // --- 3. Functional Controls (C, CE, and Shift) ---
-    // This panel holds the Clear buttons and the Shift toggle
-    JPanel bottomControls = new JPanel(new BorderLayout(5, 5));
-    bottomControls.setBackground(new Color(25, 25, 25));
-    bottomControls.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
+    // --- 3. Bottom Controls Layout ---
+    JPanel bottomControls = new JPanel(new BorderLayout(2, 2));
+    bottomControls.setBackground(currentTheme.bgColor);
 
-    // Panel for C and CE (Side-by-side)
-    JPanel alphaGrid = new JPanel(new GridLayout(1, 2, 5, 5)); 
-    alphaGrid.setBackground(new Color(25, 25, 25));
+    JPanel alphaGrid = new JPanel(new GridLayout(1, 2, 2, 2)); 
+    alphaGrid.setBackground(currentTheme.bgColor);
 
+    // Action Listeners for C and CE
     clearAlphaBtn.addActionListener(e -> {
-        updateDisplay(""); // Clears and maintains RIGHT alignment
+        updateDisplay(""); 
         display.requestFocusInWindow();
     });
 
@@ -2072,24 +2677,23 @@ public class CopyOfArithmos {
     alphaGrid.add(backAlphaBtn);
     alphaGrid.add(clearAlphaBtn);
 
+    // Shift Logic (Case Toggling)
     shiftBtn.addActionListener(e -> {
         isUppercase = !isUppercase; 
-        
-        for (RoundedButton b : alphaButtons) {
+        for (JButton b : alphaButtons) {
             String txt = b.getText();
             b.setText(isUppercase ? txt.toUpperCase() : txt.toLowerCase());
         }
-        
-        for (RoundedButton b : greekButtons) {
+        for (JButton b : greekButtons) {
             b.setText(toggleGreekCase(b.getText()));
         }
     });
 
     // Assemble the bottom section
-    bottomControls.add(alphaGrid, BorderLayout.NORTH); // C/CE on top
-    bottomControls.add(shiftBtn, BorderLayout.SOUTH);  // Shift on bottom
+    bottomControls.add(alphaGrid, BorderLayout.NORTH);
+    bottomControls.add(shiftBtn, BorderLayout.SOUTH);
 
-    // Add everything to main
+    // Final Assembly
     main.add(alphaTabs, BorderLayout.CENTER);
     main.add(bottomControls, BorderLayout.SOUTH); 
     
@@ -2100,7 +2704,6 @@ public class CopyOfArithmos {
     String lower = "αβγδεζηθικλμνξοπρστυφχψω";
     String upper = "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ";
     
-    // If we are now Uppercase, we look for the symbol in the lowercase string to find the index
     if (isUppercase) {
         int idx = lower.indexOf(symbol);
         return (idx != -1) ? String.valueOf(upper.charAt(idx)) : symbol;
@@ -2109,28 +2712,10 @@ public class CopyOfArithmos {
         return (idx != -1) ? String.valueOf(lower.charAt(idx)) : symbol;
     }
     }
-    
-    private static RoundedButton createSymbolButton(String symbol) {
-    RoundedButton btn = new RoundedButton(symbol);
-    btn.setBackground(new Color(50, 50, 50));
-    btn.setForeground(Color.WHITE);
-    
-    btn.addActionListener(e -> {
-    String toPrint = btn.getText(); 
-    String current = display.getText();
-    
-    if (current.equals("0")) {
-        updateDisplay(toPrint); // Use helper here
-    } else {
-        updateDisplay(current + toPrint); // Use helper here
-    }
-    });
-    return btn;
-    }
 
     private static JPanel create3DGraphPanel() {
     JPanel container = new JPanel(new BorderLayout());
-    container.setBackground(bgColor);
+    container.setBackground(currentTheme.bgColor);
 
     // 1. THE MAIN CANVAS
     JPanel graphCanvas = new JPanel() {
@@ -2142,7 +2727,7 @@ public class CopyOfArithmos {
     g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
     
     // Background
-    g2d.setColor(bgColor);
+    g2d.setColor(currentTheme.bgColor);
     g2d.fillRect(0, 0, getWidth(), getHeight());
 
     int cX = getWidth() / 2;
@@ -2153,7 +2738,7 @@ public class CopyOfArithmos {
     
     // --- 1. DRAW GROUND GRID (Dashed Lines) ---
     g2d.setStroke(new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{2}, 0));
-    g2d.setColor(currentTheme.functionButton); // Very subtle white
+    g2d.setColor(currentTheme.regularButton); // Very subtle white
     for (double i = -axisLimit; i <= axisLimit; i++) {
         drawLine3D(g2d, i, -axisLimit, 0, i, axisLimit, 0, cX, cY); 
         drawLine3D(g2d, -axisLimit, i, 0, axisLimit, i, 0, cX, cY); 
@@ -2161,7 +2746,7 @@ public class CopyOfArithmos {
 
     // --- 2. DRAW NUMBERS ON GRID ---
     g2d.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-    g2d.setColor(currentTheme.functionButton);
+    g2d.setColor(currentTheme.foreground);
     for (int i = (int)-axisLimit; i <= (int)axisLimit; i++) {
         if (i % 2 == 0 && i != 0) { // Number every 2 units to keep it clean
             drawLabel3D(g2d, String.valueOf(i), i, 0.3, 0, cX, cY); // X numbers
@@ -2209,13 +2794,14 @@ public class CopyOfArithmos {
     g2d.setFont(new Font("Segoe UI", Font.PLAIN, 11));
     g2d.drawString("DRAG: ROTATE | SLIDER: ZOOM | ENTER: UPDATE", 20, getHeight() - 20);
     }
+    
     };
     
 
     // Min: 50, Max: 800, Default: zoomScale (which is now 250)
     // This ensures 50 <= 250 <= 800
     JSlider zoomSlider = new JSlider(JSlider.VERTICAL, 50, 800, (int)zoomScale);
-    zoomSlider.setBackground(bgColor);
+    zoomSlider.setBackground(currentTheme.bgColor);
     zoomSlider.setFocusable(false);
     zoomSlider.setPreferredSize(new Dimension(40, 0));
 
@@ -2279,7 +2865,7 @@ public class CopyOfArithmos {
     southPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
 
     formulaInput = new JTextField("");
-    formulaInput.setBackground(currentTheme.background);
+    formulaInput.setBackground(currentTheme.bgColor);
     formulaInput.setForeground(currentTheme.foreground);
     formulaInput.setCaretColor(currentTheme.foreground);
     formulaInput.setFont(new Font("Segoe UI", Font.PLAIN, 14));
@@ -2289,26 +2875,40 @@ public class CopyOfArithmos {
     ));
 
     formulaInput.addActionListener(e -> {
-    String f = formulaInput.getText().toLowerCase();
-    if (!f.isEmpty()) {
-        // Add new layer with a cycling color
-        Color nextColor = LAYER_COLORS[layers.size() % LAYER_COLORS.length];
-        layers.add(new EquationLayer(f, nextColor));
-        
-        formulaInput.setText(""); // Clear input after adding
-        updateEQPanel(graphCanvas);
+    String input = formulaInput.getText().toLowerCase().trim();
+    if (input.isEmpty()) return;
+
+    // 1. Define a cycling color for the new entry
+    Color nextColor = LAYER_COLORS[layers.size() % LAYER_COLORS.length];
+
+    if (input.startsWith("cont(")) {
+        // This sends the command to your SEPARATE contour panel
+        handleContourCommand(input); 
+    } 
+    else if (input.startsWith("3dgrf") || input.startsWith("vect") || input.startsWith("perp")) {
+        // This adds it to the 3D layers list
+        layers.add(new EquationLayer(input, nextColor));
         graphCanvas.repaint();
+    } 
+    else {
+        // This handles your 2D features (grf, line, dist, lim)
+        // Ensure you have a method or list for 2D layers
+        add2DLayer(input, nextColor); 
     }
+    formulaInput.setText(""); // Clear the box
     });
 
-    JButton snapBtn = new JButton("SAVE");
-    styleButton(snapBtn);
-    snapBtn.setBackground(new Color(17, 17, 17));
-    snapBtn.setForeground(new Color(238, 255, 122));
-    snapBtn.addActionListener(e -> saveScreenshot(graphCanvas));
+    JButton clearBtn = new JButton("CLEAR ALL");
+    clearBtn.setBackground(currentTheme.functionButton);
+    clearBtn.setForeground(currentTheme.clearColor);
+    clearBtn.addActionListener(e -> {
+        layers.clear();
+        updateEQPanel(graphCanvas); // This refresh is what fixes the "dead" button
+        graphCanvas.repaint();
+    });
 
     southPanel.add(formulaInput, BorderLayout.CENTER);
-    southPanel.add(snapBtn, BorderLayout.EAST);
+    southPanel.add(clearBtn, BorderLayout.EAST);
 
     // --- FINAL ASSEMBLY ---
     container.add(graphCanvas, BorderLayout.CENTER);
@@ -2600,6 +3200,22 @@ public class CopyOfArithmos {
         return 0;
     }
     }
+    // Inside renderSolidScene or a specific draw3DGeometry method
+    private static void draw3DVector(Graphics2D g2d, double x, double y, double z, Color color, int cX, int cY) {
+    Point origin = project(0, 0, 0, cX, cY);
+    Point tip = project(x, y, z, cX, cY);
+
+    g2d.setColor(color);
+    g2d.setStroke(new BasicStroke(2.5f));
+    g2d.drawLine(origin.x, origin.y, tip.x, tip.y);
+
+    // 3D Arrowhead: A small 3D dot or a cross-line at the tip
+    g2d.fillOval(tip.x - 4, tip.y - 4, 8, 8);
+    
+    // Labeling coordinates at the tip
+    g2d.setFont(new Font("Consolas", Font.PLAIN, 10));
+    g2d.drawString(String.format("(%.1f, %.1f, %.1f)", x, y, z), tip.x + 5, tip.y - 5);
+    }
 
     private static void saveScreenshot(JPanel panel) {
     BufferedImage img = new BufferedImage(panel.getWidth(), panel.getHeight(), BufferedImage.TYPE_INT_RGB);
@@ -2614,13 +3230,14 @@ public class CopyOfArithmos {
     private static JPanel createControlPanel(JPanel graphCanvas) {
     JPanel panel = new JPanel();
     panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-    panel.setBackground(new Color(17, 17, 17));
+    panel.setBackground(currentTheme.functionButton);
     panel.setPreferredSize(new Dimension(190, 0));
     panel.setBorder(BorderFactory.createEmptyBorder(10, 5, 10, 5));
+    panel.setVisible(true); //currently developing
 
     JLabel eqLabel = new JLabel("EQUATIONS");
     eqLabel.setFont(new Font("Segoe UI", Font.BOLD, 11));
-    eqLabel.setForeground(Color.DARK_GRAY);
+    eqLabel.setForeground(currentTheme.foreground);
     eqLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
     panel.add(eqLabel);
     panel.add(Box.createVerticalStrut(8));
@@ -2637,8 +3254,8 @@ public class CopyOfArithmos {
 
     // --- Buttons ---
     JButton clearAllBtn = new JButton("CLEAR ALL");
-    styleSmallButton(clearAllBtn, new Color(25, 25, 25));
-    clearAllBtn.setForeground(new Color(230, 136, 136));
+    styleSmallButton(clearAllBtn, currentTheme.bgColor);
+    clearAllBtn.setForeground(currentTheme.clearColor);
     clearAllBtn.addActionListener(e -> {
         layers.clear();
         updateEQPanel(graphCanvas); // This refresh is what fixes the "dead" button
@@ -2668,8 +3285,8 @@ public class CopyOfArithmos {
         
         // 2. Input Box
         JTextField editBox = new JTextField(layer.formula);
-        editBox.setBackground(new Color(35, 35, 35));
-        editBox.setForeground(Color.WHITE);
+        editBox.setBackground(currentTheme.regularButton);
+        editBox.setForeground(currentTheme.foreground);
         editBox.setFont(new Font("Consolas", Font.PLAIN, 11)); // Smaller font
         editBox.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 2));
 
@@ -2690,7 +3307,7 @@ public class CopyOfArithmos {
     private static void styleSmallButton(JButton btn, Color bg) {
     btn.setFont(new Font("Segoe UI", Font.BOLD, 10));
     btn.setBackground(bg);
-    btn.setForeground(Color.WHITE);
+    btn.setForeground(currentTheme.foreground);
     btn.setFocusPainted(false);
     btn.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
     btn.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -2700,8 +3317,8 @@ public class CopyOfArithmos {
 
     private static void styleCButton(JButton btn) {
     btn.setFont(new Font("Arial", Font.BOLD, 9));
-    btn.setBackground(new Color(50, 50, 50));
-    btn.setForeground(Color.LIGHT_GRAY);
+    btn.setBackground(currentTheme.functionButton);
+    btn.setForeground(currentTheme.foreground);
     btn.setFocusPainted(false);
     btn.setPreferredSize(new Dimension(22, 0));
     btn.setBorder(BorderFactory.createLineBorder(new Color(70, 70, 70)));
@@ -2743,7 +3360,7 @@ public class CopyOfArithmos {
 
     private static JPanel createProgrammingPanel() {
     JPanel main = new JPanel(new BorderLayout());
-    main.setBackground(new Color(25, 25, 25));
+    main.setBackground(currentTheme.bgColor);
 
     // --- 1. THE TOP LABELS SECTION ---
     JPanel displayLabels = new JPanel(new GridLayout(4, 1, 2, 2));
@@ -2767,7 +3384,7 @@ public class CopyOfArithmos {
 
     // --- 2. THE BUTTON KEYPAD SECTION ---
     JPanel keypad = new JPanel(new GridLayout(7, 4, 2, 2)); // Adjusted rows to 7
-    keypad.setBackground(new Color(30, 30, 30));
+    keypad.setBackground(currentTheme.regularButton);
     keypad.setFont(labelFont);
 
     String[] buttons = {
@@ -2788,9 +3405,9 @@ public class CopyOfArithmos {
         JButton btn = new JButton(b);
         btn.setFocusable(false);
         btn.setFont(buttonFont);
-        btn.setBorder(BorderFactory.createLineBorder(new Color(45, 45, 45)));
+        btn.setBorder(BorderFactory.createLineBorder(currentTheme.regularButton));
         btn.setBackground(new Color(55, 55, 55));
-        btn.setForeground(Color.WHITE);
+        btn.setForeground(currentTheme.foreground);
         btn.setFont(buttonFont);
 
         // --- CUSTOM COLOR LOGIC ---
@@ -2821,21 +3438,25 @@ public class CopyOfArithmos {
 
     // 2. RESTORE AESTHETICS (No Borders, Consistent Background)
     // Style the Dropdowns
-    styleDropdown(categoryBox, segoeFont, bgColor, textColor);
-    styleDropdown(fromUnitBox, segoeFont, bgColor, textColor);
-    styleDropdown(toUnitBox, segoeFont, bgColor, textColor);
+    styleDropdown(categoryBox, segoeFont, currentTheme.bgColor, currentTheme.foreground);
+    styleDropdown(fromUnitBox, segoeFont, currentTheme.bgColor, currentTheme.foreground);
+    styleDropdown(toUnitBox, segoeFont, currentTheme.bgColor, currentTheme.foreground);
     
     // Style the Input Box
     convInput.setFont(inputFont);
-    convInput.setBackground(currentTheme.background); // Match main background
+    convInput.setBackground(currentTheme.bgColor); // Match main background
     convInput.setForeground(currentTheme.foreground);
-    convInput.setCaretColor(Color.WHITE);
+    convInput.setCaretColor(currentTheme.foreground);
     convInput.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0)); // No visible border lines
     convInput.setOpaque(true);
     
     // Style the Result Label
     convResult.setFont(inputFont);
-    convResult.setForeground(focusColor);
+    convResult.setForeground(currentTheme.foreground);
+    
+    categoryBox.setForeground(currentTheme.foreground);
+    fromUnitBox.setForeground(currentTheme.foreground);
+    toUnitBox.setForeground(currentTheme.foreground);
 
     // 3. INITIAL POPULATION
     updateUnitBoxes(); 
@@ -2857,7 +3478,7 @@ public class CopyOfArithmos {
 
     // 5. LAYOUT ASSEMBLY
     JPanel mainContainer = new JPanel(new GridBagLayout());
-    mainContainer.setBackground(bgColor);
+    mainContainer.setBackground(currentTheme.bgColor);
     mainContainer.setBorder(null); // Ensure container is borderless
 
     GridBagConstraints gbc = new GridBagConstraints();
@@ -2865,7 +3486,7 @@ public class CopyOfArithmos {
     gbc.weighty = 1.0;
 
     JPanel leftPanel = new JPanel(new GridBagLayout());
-    leftPanel.setBackground(bgColor);
+    leftPanel.setBackground(currentTheme.bgColor);
     leftPanel.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 15));
     
     GridBagConstraints lGbc = new GridBagConstraints();
@@ -2881,7 +3502,7 @@ public class CopyOfArithmos {
     leftPanel.add(toUnitBox, lGbc);
 
     JPanel rightPanel = new JPanel(new BorderLayout());
-    rightPanel.setBackground(bgColor);
+    rightPanel.setBackground(currentTheme.bgColor);
     rightPanel.setBorder(BorderFactory.createEmptyBorder(30, 15, 30, 30));
     rightPanel.add(createNumericKeypad(), BorderLayout.CENTER);
 
@@ -3032,8 +3653,8 @@ public class CopyOfArithmos {
     JTextField input = new JTextField("1", 10);
     input.setFont(font);
     input.setBackground(bgColor);
-    input.setForeground(textColor);
-    input.setCaretColor(Color.CYAN);
+    input.setForeground(currentTheme.foreground);
+    input.setCaretColor(textColor);
     input.setOpaque(true);
     input.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15)); // Padding
     
@@ -3051,8 +3672,8 @@ public class CopyOfArithmos {
     cb.setFocusable(false);
     }
     private static void applyTheme(JComponent comp) {
-    comp.setBackground(bgColor); // Use your dark background
-    comp.setForeground(textColor);
+    comp.setBackground(currentTheme.bgColor); // Use your dark background
+    comp.setForeground(currentTheme.foreground);
     if (comp instanceof JPanel) {
         ((JPanel) comp).setOpaque(true);
         ((JPanel) comp).setBorder(null); // Kills the white frame
@@ -3062,16 +3683,18 @@ public class CopyOfArithmos {
     JPanel keypad = new JPanel(new GridLayout(4, 3, 10, 10));
     keypad.setOpaque(false);
 
-    String[] keys = {"7", "8", "9", "4", "5", "6", "1", "2", "3", "CE", "0", "."};
+    String[] keys = {"7", "8", "9", "4", "5", "6", "1", "2", "3", "C", "0", "."};
     for (String key : keys) {
         JButton btn = new JButton(key);
         btn.setFont(new Font("Segoe UI", Font.BOLD, 22));
-        if (key.equals("CE")) {
-            btn.setBackground(new Color(180, 50, 50)); // Red for Clear Entry
+        if (key.equals("C")) {
+            btn.setBackground(currentTheme.functionButton); 
+            btn.setForeground(currentTheme.clearColor);// Red for Clear Entry
         } else {
-            btn.setBackground(new Color(45, 45, 45));
+            btn.setBackground(currentTheme.regularButton);
+            btn.setForeground(currentTheme.foreground);
         }
-        btn.setForeground(Color.WHITE);
+        
         
         // FIX: Hard-lock the size so they stay as squares
         Dimension size = new Dimension(75, 75);
@@ -3084,7 +3707,7 @@ public class CopyOfArithmos {
         // Inside your keypad button loop
         btn.addActionListener(e -> {
             String current = convInput.getText();
-            if (key.equals("CE")) {
+            if (key.equals("C")) {
                 convInput.setText("");
             } else if (key.equals(".")) {
                 if (!current.contains(".")) convInput.setText(current + ".");
@@ -4021,8 +4644,8 @@ public class CopyOfArithmos {
     private static JButton createMenuButton(String text) {
     JButton btn = new JButton(text);
     btn.setMaximumSize(new Dimension(220, 45));
-    btn.setForeground(Color.WHITE);
-    btn.setBackground(MENU_BG);
+    btn.setForeground(currentTheme.foreground);
+    btn.setBackground(currentTheme.regularButton);
     btn.setFocusPainted(false);
     btn.setBorderPainted(false);
     btn.setHorizontalAlignment(SwingConstants.LEFT);
@@ -4031,8 +4654,8 @@ public class CopyOfArithmos {
 
     // Simple hover effect
     btn.addMouseListener(new java.awt.event.MouseAdapter() {
-        public void mouseEntered(java.awt.event.MouseEvent e) { btn.setBackground(HOVER_COLOR); }
-        public void mouseExited(java.awt.event.MouseEvent e) { btn.setBackground(MENU_BG); }
+        public void mouseEntered(java.awt.event.MouseEvent e) { btn.setBackground(currentTheme.functionButton); }
+        public void mouseExited(java.awt.event.MouseEvent e) { btn.setBackground(currentTheme.regularButton); }
     });
 
     btn.addActionListener(e -> {
@@ -4073,15 +4696,21 @@ public class CopyOfArithmos {
 
     sideMenu = new JPanel();
     sideMenu.setLayout(null);
-    sideMenu.setBackground(MENU_BG);
+    sideMenu.setBackground(currentTheme.regularButton);
     sideMenu.setBounds(0, 0, 240, 600);
     sideMenu.setVisible(false);
     sideMenu.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, Color.GRAY));
-
-    String[] modes = {
-        "Standard", "Functions", "Graphing",
-        "Matrix", "Programmer", "Converter", "Settings"
-    };
+    //if(isDeveloping == true){
+        String[] modes = {
+        "Standard", "Functions", "Check", "Graphing",
+        "Matrix", "Programmer", "Converter", "Other", "Settings", "Help"
+        };
+    //}
+    
+    //String[] modes = { 
+     //   "Standard", "Functions", "Graphing", "Converter", "Help"
+    //};
+    
 
     int yPos = 60;
 
@@ -4094,16 +4723,18 @@ public class CopyOfArithmos {
             buttonsPanel.removeAll();   // ✅ always clear central area
 
             if (mode.equals("Standard")) {
-                resizeCalculator(400, 600);
+                resizeCalculator(450, 600);
                 buttonsPanel.removeAll();
                 buttonsPanel.add(createBasicPanel(), BorderLayout.CENTER);
+                panelTitleLabel.setText("STANDARD");
+
             }
 
             else if (mode.equals("Functions")) {
 
                 JTabbedPane tabbedPane = new JTabbedPane();
-                tabbedPane.setBackground(new Color(45,45,45));
-                tabbedPane.setForeground(Color.WHITE);
+                tabbedPane.setBackground(currentTheme.regularButton);
+                tabbedPane.setForeground(currentTheme.foreground);
                 resizeCalculator(450, 600);
                 
                 tabbedPane.add("Sci", createScientificPanel());
@@ -4112,51 +4743,86 @@ public class CopyOfArithmos {
                 tabbedPane.add("Const", createConstantPanel());
                 tabbedPane.add("Trig", createTrigPanel());
                 tabbedPane.add("Adv", createAdvancedPanel());
-                tabbedPane.add("∫", createCalculus1Panel());
-                tabbedPane.add("Stat", createStatisticsPanel());
+                tabbedPane.add("∫", createCalculusPanel());
+                tabbedPane.add("Stat", createStatPanel());
 
                 buttonsPanel.add(tabbedPane, BorderLayout.CENTER);
+                panelTitleLabel.setText("FUNCTIONS");
+
             }
 
             else if (mode.equals("Graphing")) {
 
                 JTabbedPane tabbedPane = new JTabbedPane();
-                tabbedPane.setBackground(new Color(45,45,45));
-                tabbedPane.setForeground(Color.WHITE);
-                resizeCalculator(550, 600);
-
+                tabbedPane.setBackground(currentTheme.regularButton);
+                tabbedPane.setForeground(currentTheme.foreground);
+                resizeCalculator(450, 600);
+                //if(isDeveloping == true){
+                tabbedPane.add("Func", createFunctionPanel());
+                tabbedPane.add("aA", createAlphaPanel());
                 tabbedPane.add("2D", createGraphPanel());
                 tabbedPane.add("3D", create3DGraphPanel());
-                tabbedPane.add("∫", createCalculus2Panel());
-
+                tabbedPane.add("Cont", contourPanel);
+                //}
+                //else{
+                 //   tabbedPane.add("2D", createGraphPanel());
+                 //  tabbedPane.add("3D", create3DGraphPanel());
+                //}
                 buttonsPanel.add(tabbedPane, BorderLayout.CENTER);
+                panelTitleLabel.setText("GRAPHING");
+
             }
 
             else if (mode.equals("Programmer")) {
                 buttonsPanel.add(createProgrammingPanel(), BorderLayout.CENTER);
-                resizeCalculator(400, 600);
+                resizeCalculator(450, 600);
+                panelTitleLabel.setText("PROGRAMMER");
+
             }
 
             else if (mode.equals("Converter")) {
                 buttonsPanel.add(createConversionPanel(), BorderLayout.CENTER);
-                resizeCalculator(550, 600);
+                resizeCalculator(450, 600);
+                panelTitleLabel.setText("CONVERTER");
+
             }
             else if (mode.equals("Matrix")) {
                 buttonsPanel.add(createMatrixPanel(), BorderLayout.CENTER);
                 resizeCalculator(450, 600);
+                panelTitleLabel.setText("MATRIX");
+
+            }
+            else if (mode.equals("Other")) {
+                JTabbedPane tabbedPane = new JTabbedPane();
+                tabbedPane.setBackground(currentTheme.regularButton);
+                tabbedPane.setForeground(currentTheme.foreground);
+                resizeCalculator(450, 600);
+                
+                tabbedPane.add("Physics", createPhysicsPanel());
+                buttonsPanel.add(tabbedPane, BorderLayout.CENTER);
+                panelTitleLabel.setText("OTHER");
+                
             }
             else if (mode.equals("Settings")) {
-            
-                if (currentButtonGrid != null) {
-                    mainPanel.remove(currentButtonGrid);
-                }
-            
+                // 1. Generate the settings panel
                 JPanel settingsPanel = createSettingsPanel();
-                settingsPanel.setBounds(0, 160, mainPanel.getWidth(), mainPanel.getHeight() - 160);
-            
-                currentButtonGrid = settingsPanel;
-                mainPanel.add(settingsPanel);
-
+    
+                // 2. Treat it like all the other panels: add it to buttonsPanel!
+                buttonsPanel.add(settingsPanel, BorderLayout.CENTER);
+    
+                // 3. Set your title and size matching your structural layout
+                panelTitleLabel.setText("SETTINGS");
+                resizeCalculator(450, 600);
+            }
+            else if(mode.equals("Help")){
+                buttonsPanel.add(createHelpPanel(), BorderLayout.CENTER);
+                resizeCalculator(450, 600);
+                panelTitleLabel.setText("HELP");
+            }
+            else if(mode.equals("Check")){
+                buttonsPanel.add(createCheckPanel(), BorderLayout.CENTER);
+                resizeCalculator(450, 600);
+                panelTitleLabel.setText("CHECK");
             }
 
             buttonsPanel.revalidate();
@@ -4176,16 +4842,16 @@ public class CopyOfArithmos {
     JButton btn = new JButton(text);
     btn.setBounds(5, y, 230, 40);
     btn.setHorizontalAlignment(SwingConstants.LEFT);
-    btn.setForeground(Color.WHITE);
-    btn.setBackground(MENU_BG);
+    btn.setForeground(currentTheme.foreground);
+    btn.setBackground(currentTheme.regularButton);
     btn.setFont(new Font("Segoe UI", Font.PLAIN, 14));
     btn.setBorderPainted(false);
     btn.setFocusPainted(false);
 
     // Hover effect to match image 30a9a4
     btn.addMouseListener(new java.awt.event.MouseAdapter() {
-        public void mouseEntered(java.awt.event.MouseEvent e) { btn.setBackground(HOVER_COLOR); }
-        public void mouseExited(java.awt.event.MouseEvent e) { btn.setBackground(MENU_BG); }
+        public void mouseEntered(java.awt.event.MouseEvent e) { btn.setBackground(currentTheme.functionButton); }
+        public void mouseExited(java.awt.event.MouseEvent e) { btn.setBackground(currentTheme.regularButton); }
     });
 
     btn.addActionListener(e -> {
@@ -4253,56 +4919,96 @@ public class CopyOfArithmos {
 
     timer.start();
     }
-    static JPanel createSettingsPanel() {
+    public static JPanel createSettingsPanel() {
+    // Initialize the panel with a background that MUST be visible
+    JPanel panel = new JPanel();
+    panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+    panel.setBackground(currentTheme.bgColor);
+    panel.setOpaque(true); // Forces the background to paint
 
-    JPanel panel = new JPanel(null);
-    panel.setBounds(0, 0, 240, 600);
-    panel.setBackground(currentTheme.background);
+    // Creating the dropdown
+    String[] themes = {"Light", "Dark", "Ocean", "System Settings"};
+    JComboBox<String> themeBox = new JComboBox<>(themes);
+    
+    // SWING TRICK: JComboBox in BoxLayout needs a setMaximumSize or it stays invisible/tiny
+    themeBox.setMaximumSize(new Dimension(250, 40));
+    themeBox.setPreferredSize(new Dimension(250, 40));
+    themeBox.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-    JLabel title = new JLabel("Settings");
-    title.setBounds(20, 20, 200, 30);
-    title.setFont(new Font("Segoe UI", Font.BOLD, 18));
-    title.setForeground(currentTheme.foreground);
-    panel.add(title);
-
-    JLabel themeLabel = new JLabel("Theme");
-    themeLabel.setBounds(20, 80, 200, 25);
-    themeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-    themeLabel.setForeground(currentTheme.foreground);
-    panel.add(themeLabel);
-
-    String[] themes = {
-        "Sunset", "Night", "Rainforest", "Suburbs", "Sunrise",
-        "Velvet", "Sky", "Forest", "Sunlight", "Standard"
-    };
-
-    JComboBox<String> themeDropdown = new JComboBox<>(themes);
-    themeDropdown.setBounds(20, 110, 200, 35);
-    themeDropdown.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-    themeDropdown.setFocusable(false);
-    panel.add(themeDropdown);
-
-    // Set current selection
-    themeDropdown.setSelectedItem(currentTheme.name);
-
-    themeDropdown.addActionListener(e -> {
-        String selected = (String) themeDropdown.getSelectedItem();
-
-        currentTheme = themeMap.get(selected);
-
-        // Update settings panel colors immediately
-        panel.setBackground(currentTheme.background);
-        title.setForeground(currentTheme.foreground);
-        themeLabel.setForeground(currentTheme.foreground);
-
-        refreshAllPanels();
+    themeBox.addActionListener(e -> {
+        applyTheme((String) themeBox.getSelectedItem());
     });
 
+    // Add them to the panel
+    panel.add(Box.createVerticalStrut(50)); // Add top spacing
+    panel.add(themeBox);
+    
     return panel;
+    }
+    private static void applyTheme(String mode) {
+    switch (mode) {
+        case "Light":
+            currentTheme.bgColor = new Color(230, 230, 230);
+            currentTheme.foreground = Color.BLACK;
+            currentTheme.regularButton = new Color(221, 221, 221);
+            currentTheme.functionButton = new Color(239, 239, 239);
+            currentTheme.clearColor = new Color(166, 73, 73);
+            currentTheme.memoryDegColor = new Color(73, 79, 166);
+            currentTheme.equalsColor = new Color(166, 73, 73);
+            break;
+
+        case "Ocean":
+            currentTheme.bgColor = new Color(11, 39, 116);
+            currentTheme.foreground = Color.WHITE;
+            currentTheme.regularButton = new Color(23, 33, 198);
+            currentTheme.functionButton = new Color(12, 5, 96);
+            currentTheme.clearColor = new Color(230, 136, 136);
+            currentTheme.memoryDegColor = new Color(51, 147, 255);
+            currentTheme.equalsColor = new Color(0, 141, 223);
+            break;
+
+        case "Dark":
+        case "System Settings":
+        default:
+            currentTheme.bgColor = new Color(25, 25, 25);
+            currentTheme.foreground = Color.WHITE;
+            currentTheme.regularButton = new Color(34, 34, 34);
+            currentTheme.functionButton = new Color(17, 17, 17);
+            currentTheme.clearColor = new Color(230, 136, 136);
+            currentTheme.memoryDegColor = new Color(238, 255, 122);
+            currentTheme.equalsColor = new Color(238, 255, 122);
+            break;
+    }
+
+    // After updating the object, trigger the visual refresh
+    refreshAppAppearance();
+    }
+
+    private static void refreshAppAppearance() {
+    if (instance == null) return; // Safety check
+
+    // Now we use 'instance' instead of 'this' or 'getContentPane'
+    frame.getContentPane().setBackground(currentTheme.bgColor);
+    
+    if (canvas != null) {
+        canvas.setBackground(currentTheme.bgColor);
+        canvas.repaint();
+    }
+    
+    // This will refresh every panel, label, and button in the frame
+    SwingUtilities.updateComponentTreeUI(frame);
+    }
+
+    private static void styleSettingComponent(JComponent comp) {
+    comp.setBackground(currentTheme.regularButton);
+    comp.setForeground(currentTheme.foreground);
+    comp.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+    comp.setAlignmentX(Component.LEFT_ALIGNMENT);
+    comp.setFocusable(false);
     }
     static class Theme {
     String name;
-    Color background;
+    Color bgColor;
     Color foreground;
     Color regularButton;
     Color functionButton;
@@ -4316,7 +5022,7 @@ public class CopyOfArithmos {
           ) {
 
         this.name = name;
-        this.background = bg;
+        this.bgColor = bg;
         this.foreground = fg;
         this.regularButton = regular;
         this.functionButton = func;
@@ -4328,10 +5034,10 @@ public class CopyOfArithmos {
     static void refreshAllPanels() {
 
     // Update main background
-    mainPanel.setBackground(currentTheme.background);
+    mainPanel.setBackground(currentTheme.bgColor);
 
     // Update display
-    display.setBackground(currentTheme.background);
+    display.setBackground(currentTheme.bgColor);
     display.setForeground(currentTheme.foreground);
 
     modeLabel.setForeground(currentTheme.memoryDegColor);
@@ -4396,6 +5102,1366 @@ public class CopyOfArithmos {
     button.setBackground(currentTheme.functionButton);
     button.setForeground(currentTheme.foreground);
     }
+    // Add these fields to the top of your Arithmos class
 
+    static class PhysData {
+        String[] labels;
+        String[][] units;
+        double[][] factors;
+        java.util.function.BiFunction<double[], Integer, Double> solver;
+
+        PhysData(String[] l, String[][] u, double[][] f, java.util.function.BiFunction<double[], Integer, Double> s) {
+            this.labels = l; this.units = u; this.factors = f; this.solver = s;
+        }
+    }
+
+    // --- 2. THE MASTER LIST (Categories 1-7) ---
+    private static void initializePhysicsData(){
+    addFormula("Velocity / Speed", new String[]{"Distance", "Time", "Velocity"},
+        new String[][]{
+            {"m", "km", "cm", "mm", "μm", "nm", "in", "ft", "yd", "mi", "nmi", "fathom", "AU", "ly", "pc", "Å"}, 
+            {"s", "min", "hr", "ms", "μs", "ns", "ps", "day", "wk", "yr", "decade"}, 
+            {"m/s", "km/h", "mph", "knot", "ft/s", "mach", "cm/s", "mm/s", "km/s", "c (light)", "in/s", "yd/min"}
+        },
+        new double[][]{
+            {1, 1000, 0.01, 0.001, 1E-6, 1E-9, 0.0254, 0.3048, 0.9144, 1609.34, 1852, 1.8288, 1.496E11, 9.461E15, 3.086E16, 1E-10}, 
+            {1, 60, 3600, 0.001, 1E-6, 1E-9, 1E-12, 86400, 604800, 3.1536E7, 3.1536E8}, 
+            {1, 0.277778, 0.44704, 0.514444, 0.3048, 340.3, 0.01, 0.001, 1000, 299792458, 0.0254, 0.01524}
+        },
+        (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+    addFormula("Acceleration", new String[]{"Δ Velocity", "Time", "Acceleration"},
+        new String[][]{
+            {"m/s", "km/h", "mph", "knot", "ft/s", "mach", "cm/s", "mm/s", "km/s", "c (light)", "in/s"}, 
+            {"s", "min", "hr", "ms", "μs", "ns", "day", "wk", "yr"}, 
+            {"m/s²", "g-unit", "ft/s²", "km/h²", "in/s²", "cm/s²", "Gal (cm/s²)", "km/s²", "μm/s²", "mph/s"}
+        },
+        new double[][]{
+            {1, 0.277778, 0.44704, 0.514444, 0.3048, 340.3, 0.01, 0.001, 1000, 299792458, 0.0254}, 
+            {1, 60, 3600, 0.001, 1E-6, 1E-9, 86400, 604800, 3.1536E7}, 
+            {1, 9.80665, 0.3048, 7.716E-5, 0.0254, 0.01, 0.01, 1000, 1E-6, 0.44704}
+        },
+        (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+    addFormula("Momentum", new String[]{"Mass", "Velocity", "Momentum"},
+        new String[][]{
+            {"kg", "g", "mg", "μg", "lb", "oz", "slug", "ton (m)", "ton (US)", "st", "ct", "Solar Mass", "u (amu)"}, 
+            {"m/s", "km/h", "mph", "knot", "ft/s", "mach", "cm/s", "km/s", "c (light)"}, 
+            {"kg·m/s", "g·cm/s", "lb·ft/s", "slug·ft/s", "lb·in/s", "N·s", "dyn·s"}
+        },
+        new double[][]{
+            {1, 0.001, 1E-6, 1E-9, 0.453592, 0.028349, 14.5939, 1000, 907.185, 6.35029, 0.0002, 1.988E30, 1.6605E-27}, 
+            {1, 0.277778, 0.44704, 0.514444, 0.3048, 340.3, 0.01, 1000, 299792458}, 
+            {1, 1E-5, 0.138255, 4.44822, 0.01152, 1, 1E-5}
+        },
+        (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+        addFormula("Density", new String[]{"Mass", "Volume", "Density"},
+    new String[][]{
+        {"kg", "g", "mg", "μg", "ton (m)", "ton (US)", "lb", "oz", "slug", "ct", "st", "Solar Mass", "Earth Mass"}, 
+        {"m³", "L", "mL", "cm³", "mm³", "μL", "ft³", "in³", "gal", "qt", "pt", "cup", "fl oz", "bbl", "tsp", "tbsp"}, 
+        {"kg/m³", "g/cm³", "lb/ft³", "lb/in³", "kg/L", "g/mL", "oz/in³", "slug/ft³", "mg/L", "μg/m³"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-9, 1000, 907.185, 0.453592, 0.0283495, 14.5939, 0.0002, 6.35029, 1.988E30, 5.972E24}, 
+        {1, 0.001, 1E-6, 1E-6, 1E-9, 1E-9, 0.0283168, 1.6387E-5, 0.00378541, 0.000946, 0.000473, 0.000236, 2.957E-5, 0.15898, 4.928E-6, 1.478E-5}, 
+        {1, 1000, 16.0185, 27679.9, 1000, 1000, 1729.99, 515.379, 0.001, 1E-9}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Force / Weight", new String[]{"Mass", "Accel", "Force"},
+    new String[][]{
+        {"kg", "g", "mg", "lb", "oz", "slug", "ton", "st", "ct", "u (amu)"}, 
+        {"m/s²", "g-unit", "ft/s²", "cm/s²", "in/s²", "km/h²", "Gal", "km/s²"}, 
+        {"N", "kN", "mN", "μN", "lbf", "dyn", "kgf", "pdl", "ozf", "kip", "sn (sthene)"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 0.453592, 0.0283495, 14.5939, 907.185, 6.35, 0.0002, 1.66E-27}, 
+        {1, 9.80665, 0.3048, 0.01, 0.0254, 7.716E-5, 0.01, 1000}, 
+        {1, 1000, 0.001, 1E-6, 4.44822, 1E-5, 9.80665, 0.138255, 0.27801, 4448.22, 1000}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Impulse", new String[]{"Force", "Time", "Impulse"},
+    new String[][]{
+        {"N", "kN", "mN", "μN", "lbf", "dyn", "kgf", "pdl", "ozf", "kip"}, 
+        {"s", "min", "hr", "ms", "μs", "ns", "ps", "day", "wk"}, 
+        {"N·s", "lb-s", "dyn-s", "kgf-s", "pdl-s", "ozf-s", "kip-s"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 1E-6, 4.44822, 1E-5, 9.80665, 0.138255, 0.27801, 4448.22}, 
+        {1, 60, 3600, 0.001, 1E-6, 1E-9, 1E-12, 86400, 604800}, 
+        {1, 4.44822, 1E-5, 9.80665, 0.138255, 0.27801, 4448.22}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Pressure", new String[]{"Force", "Area", "Pressure"},
+    new String[][]{
+        {"N", "kN", "mN", "lbf", "kgf", "dyn", "ozf", "kip"}, 
+        {"m²", "cm²", "mm²", "in²", "ft²", "yd²", "acre", "ha", "barn"}, 
+        {"Pa", "kPa", "MPa", "GPa", "bar", "mbar", "psi", "atm", "torr", "mmHg", "inHg", "psf", "kgf/cm²", "dyn/cm²", "ba", "cmH2O", "inH2O", "ksi"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 4.44822, 9.80665, 1E-5, 0.278, 4448.22}, 
+        {1, 1E-4, 1E-6, 0.00064516, 0.092903, 0.8361, 4046.86, 10000, 1E-28}, 
+        {1, 1000, 1E6, 1E9, 100000, 100, 6894.76, 101325, 133.322, 133.322, 3386.39, 47.88, 98066.5, 0.1, 0.1, 98.0665, 249.08, 6894757}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Work / Energy", new String[]{"Force", "Distance", "Energy"},
+    new String[][]{
+        {"N", "kN", "mN", "lbf", "kgf", "dyn", "ozf", "kip"}, 
+        {"m", "km", "cm", "mm", "μm", "nm", "in", "ft", "yd", "mi", "nmi", "AU", "ly", "pc", "Å", "fathom"}, 
+        {"J", "kJ", "MJ", "GJ", "cal", "kcal", "Wh", "kWh", "MWh", "eV", "keV", "MeV", "GeV", "TeV", "BTU", "ft-lb", "erg", "latm", "toe", "tnt", "quad"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 4.44822, 9.80665, 1E-5, 0.278, 4448.22}, 
+        {1, 1000, 0.01, 0.001, 1E-6, 1E-9, 0.0254, 0.3048, 0.9144, 1609.34, 1852, 1.496E11, 9.461E15, 3.086E16, 1E-10, 1.8288}, 
+        {1, 1000, 1E6, 1E9, 4.184, 4184, 3600, 3.6E6, 3.6E9, 1.602E-19, 1.602E-16, 1.602E-13, 1.602E-10, 1.602E-7, 1055.06, 1.35582, 1E-7, 101.325, 4.187E10, 4.184E9, 1.055E18}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Power", new String[]{"Work/Energy", "Time", "Power"},
+    new String[][]{
+        {"J", "kJ", "MJ", "GJ", "cal", "kcal", "Wh", "kWh", "MWh", "eV", "BTU", "ft-lb", "erg"}, 
+        {"s", "min", "hr", "ms", "μs", "ns", "day", "wk", "yr"}, 
+        {"W", "kW", "MW", "GW", "hp (mech)", "hp (metric)", "hp (elec)", "cal/s", "kcal/h", "BTU/h", "ft-lb/s", "erg/s", "VA"}
+    },
+    new double[][]{
+        {1, 1000, 1E6, 1E9, 4.184, 4184, 3600, 3.6E6, 3.6E9, 1.602E-19, 1055.06, 1.35582, 1E-7}, 
+        {1, 60, 3600, 0.001, 1E-6, 1E-9, 86400, 604800, 3.1536E7}, 
+        {1, 1000, 1E6, 1E9, 745.7, 735.5, 746, 4.184, 1.163, 0.29307, 1.35582, 1E-7, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+    addFormula("Torque", new String[]{"Force", "Radius", "Torque"},
+    new String[][]{
+        {"N", "kN", "mN", "lbf", "ozf", "kgf", "dyn", "kip"}, 
+        {"m", "cm", "mm", "μm", "nm", "in", "ft", "yd", "mi", "Å"}, 
+        {"N·m", "kN·m", "mN·m", "lb-ft", "lb-in", "oz-in", "kg-m", "dyn-cm", "kgf-cm", "kip-ft", "kip-in"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 4.44822, 0.278014, 9.80665, 1E-5, 4448.22}, 
+        {1, 0.01, 0.001, 1E-6, 1E-9, 0.0254, 0.3048, 0.9144, 1609.34, 1E-10}, 
+        {1, 1000, 0.001, 1.35582, 0.112985, 0.007062, 9.80665, 1E-7, 0.0980665, 1355.82, 112.98}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+    addFormula("Surface Tension", new String[]{"Force", "Length", "Surface Tension"},
+    new String[][]{
+        {"N", "kN", "mN", "μN", "lbf", "ozf", "kgf", "dyn"}, 
+        {"m", "cm", "mm", "μm", "nm", "in", "ft", "yd", "Å"}, 
+        {"N/m", "mN/m", "dyn/cm", "lb/ft", "lb/in", "kgf/m", "mN/cm", "gf/cm"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 1E-6, 4.44822, 0.278014, 9.80665, 1E-5}, 
+        {1, 0.01, 0.001, 1E-6, 1E-9, 0.0254, 0.3048, 0.9144, 1E-10}, 
+        {1, 0.001, 0.001, 14.5939, 175.127, 9.80665, 0.1, 0.980665}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+    addFormula("Electric Charge", new String[]{"Current", "Time", "Charge"},
+    new String[][]{
+        {"A", "mA", "μA", "nA", "pA", "kA", "MA", "abA", "statA"}, 
+        {"s", "min", "hr", "ms", "μs", "ns", "day", "wk", "yr"}, 
+        {"C", "mC", "μC", "nC", "pC", "kC", "MC", "Ah", "mAh", "Fr", "e", "Faraday", "abC", "statC"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1000, 1E6, 10, 3.3356E-10}, 
+        {1, 60, 3600, 0.001, 1E-6, 1E-9, 86400, 604800, 3.1536E7}, 
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1000, 1E6, 3600, 3.6, 3.3356E-10, 1.602E-19, 96485, 10, 3.3356E-10}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Voltage / Pot. Difference", new String[]{"Energy", "Charge", "Voltage"},
+    new String[][]{
+        {"J", "kJ", "cal", "kcal", "Wh", "kWh", "eV", "erg", "BTU"}, 
+        {"C", "mC", "μC", "nC", "Ah", "mAh", "statC", "abC", "Fr"}, 
+        {"V", "mV", "μV", "kV", "MV", "GV", "nV", "pV", "abV", "statV", "W/A"}
+    },
+    new double[][]{
+        {1, 1000, 4.184, 4184, 3600, 3.6E6, 1.602E-19, 1E-7, 1055.06}, 
+        {1, 0.001, 1E-6, 1E-9, 3600, 3.6, 3.3356E-10, 10, 3.3356E-10}, 
+        {1, 0.001, 1E-6, 1000, 1E6, 1E9, 1E-9, 1E-12, 1E-8, 299.79, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Conductance", new String[]{"Current", "Voltage", "Conductance"},
+    new String[][]{
+        {"A", "mA", "μA", "kA", "nA"}, 
+        {"V", "mV", "μV", "kV", "MV"}, 
+        {"S (Siemens)", "mS", "μS", "nS", "pS", "kS", "MS", "mho", "abmho", "statmho"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1000, 1E-9}, 
+        {1, 0.001, 1E-6, 1000, 1E6}, 
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1000, 1E6, 1, 1E9, 1.112E-12}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Electric Field Strength", new String[]{"Voltage", "Distance", "Field Strength"},
+    new String[][]{
+        {"V", "mV", "kV", "MV", "abV", "statV"}, 
+        {"m", "cm", "mm", "μm", "in", "ft", "mil"}, 
+        {"V/m", "kV/m", "V/cm", "V/mm", "mV/m", "MV/m", "V/mil", "V/in", "N/C"}
+    },
+    new double[][]{
+        {1, 0.001, 1000, 1E6, 1E-8, 299.79}, 
+        {1, 0.01, 0.001, 1E-6, 0.0254, 0.3048, 2.54E-5}, 
+        {1, 1000, 100, 1000, 0.001, 1E6, 39370, 39.37, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Current Density", new String[]{"Current", "Area", "Density (J)"},
+    new String[][]{
+        {"A", "mA", "μA", "kA", "nA", "pA", "MA"}, 
+        {"m²", "cm²", "mm²", "in²", "ft²", "circular mil"}, 
+        {"A/m²", "A/cm²", "A/mm²", "mA/cm²", "A/ft²", "A/in²", "kA/m²"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1000, 1E-9, 1E-12, 1E6}, 
+        {1, 1E-4, 1E-6, 0.00064516, 0.0929, 5.067E-10}, 
+        {1, 10000, 1E6, 10, 10.76, 1550, 1000}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Resistance", new String[]{"Voltage", "Current", "Resistance"},
+    new String[][]{
+        {"V", "mV", "μV", "kV", "MV", "GV", "abV", "statV"}, 
+        {"A", "mA", "μA", "kA", "nA", "pA", "abA", "statA"}, 
+        {"Ω", "mΩ", "kΩ", "MΩ", "GΩ", "TΩ", "μΩ", "nΩ", "abΩ", "statΩ"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1000, 1E6, 1E9, 1E-8, 299.79}, 
+        {1, 0.001, 1E-6, 1000, 1E-9, 1E-12, 10, 3.3356E-10}, 
+        {1, 0.001, 1000, 1E6, 1E9, 1E12, 1E-6, 1E-9, 1E-9, 8.987E11}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Permeability", new String[]{"Inductance", "Length", "Permeability"},
+    new String[][]{
+        {"H", "mH", "μH", "nH", "pH", "abH", "statH"}, 
+        {"m", "cm", "mm", "in", "ft"}, 
+        {"H/m", "μH/m", "nH/m", "H/cm", "μH/cm"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1E-9, 8.987E11}, 
+        {1, 0.01, 0.001, 0.0254, 0.3048}, 
+        {1, 1E-6, 1E-9, 100, 0.0001}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Capacitance", new String[]{"Charge", "Voltage", "Capacitance"},
+    new String[][]{
+        {"C", "mC", "μC", "nC", "pC", "Ah", "statC", "abC"}, 
+        {"V", "mV", "μV", "kV", "MV", "abV", "statV"}, 
+        {"F", "mF", "μF", "nF", "pF", "fF", "kF", "abF", "statF", "cm (cap)"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 3600, 3.3356E-10, 10}, 
+        {1, 0.001, 1E-6, 1000, 1E6, 1E-8, 299.79}, 
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1E-15, 1000, 1E9, 1.112E-12, 1.112E-12}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Permittivity", new String[]{"Capacitance", "Length", "Permittivity"},
+    new String[][]{
+        {"F", "mF", "μF", "nF", "pF", "abF", "statF"}, 
+        {"m", "cm", "mm", "in", "ft"}, 
+        {"F/m", "μF/m", "nF/m", "pF/m", "F/cm", "statF/cm"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1E9, 1.112E-12}, 
+        {1, 0.01, 0.001, 0.0254, 0.3048}, 
+        {1, 1E-6, 1E-9, 1E-12, 100, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Magnetic Flux", new String[]{"Voltage", "Time", "Flux (Φ)"},
+    new String[][]{
+        {"V", "mV", "μV", "kV", "MV", "abV", "statV"}, 
+        {"s", "min", "hr", "ms", "μs", "ns"}, 
+        {"Wb", "mWb", "μWb", "nWb", "Mx", "kMx", "uMx", "abWb", "statWb"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1000, 1E6, 1E-8, 299.79}, 
+        {1, 60, 3600, 0.001, 1E-6, 1E-9}, 
+        {1, 0.001, 1E-6, 1E-9, 1E-8, 1E-5, 1E-14, 1, 299.79}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Mag. Flux/Field Density", new String[]{"Flux", "Area", "Density (B)"},
+    new String[][]{
+        {"Wb", "mWb", "μWb", "Mx", "kMx", "abWb", "statWb"}, 
+        {"m²", "cm²", "mm²", "in²", "ft²"}, 
+        {"T", "mT", "μT", "nT", "pT", "G", "kG", "mG", "μG", "abT", "statT"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-8, 1E-5, 1, 299.79}, 
+        {1, 1E-4, 1E-6, 0.00064516, 0.0929}, 
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1E-4, 0.1, 1E-7, 1E-10, 1, 3.335E-14}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Inductance", new String[]{"Flux", "Current", "Inductance"},
+    new String[][]{
+        {"Wb", "mWb", "μWb", "Mx", "kMx", "abWb", "statWb"}, 
+        {"A", "mA", "μA", "kA", "nA", "abA", "statA"}, 
+        {"H", "mH", "μH", "nH", "pH", "fH", "kH", "abH", "statH"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-8, 1E-5, 1, 299.79}, 
+        {1, 0.001, 1E-6, 1000, 1E-9, 10, 3.335E-10}, 
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1E-15, 1000, 1E-9, 8.987E11}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+    addFormula("Angular Resolution", new String[]{"Wavelength (λ)", "Aperture Diameter (D)", "Resolution (θ)"},
+    new String[][]{
+        {"m", "cm", "mm", "μm", "nm", "Å", "in", "ft"}, 
+        {"m", "cm", "mm", "μm", "in", "ft", "yd"}, 
+        {"rad", "deg", "arcmin", "arcsec", "mas (milliarcsec)", "μas", "grad"}
+    },
+    new double[][]{
+        {1, 0.01, 0.001, 1E-6, 1E-9, 1E-10, 0.0254, 0.3048}, 
+        {1, 0.01, 0.001, 1E-6, 0.0254, 0.3048, 0.9144}, 
+        {1, 0.017453, 0.000291, 4.8481E-6, 4.8481E-9, 4.8481E-12, 0.015708}
+    },
+    (v, t) -> t == 2 ? 1.22 * (v[0] / v[1]) : (t == 1 ? 1.22 * (v[0] / v[2]) : (v[2] * v[1]) / 1.22));
+
+addFormula("Angular Velocity", new String[]{"Angle (θ)", "Time (t)", "Ang. Vel (ω)"},
+    new String[][]{
+        {"rad", "deg", "rev", "grad", "arcmin", "arcsec", "quadrant", "sextant", "sign"}, 
+        {"s", "min", "hr", "ms", "μs", "day", "wk", "yr", "decade"}, 
+        {"rad/s", "deg/s", "rpm", "rev/s", "deg/hr", "rad/min", "grad/s", "deg/min", "rad/hr"}
+    },
+    new double[][]{
+        {1, 0.01745329, 6.283185, 0.0157079, 0.0002908, 4.8481E-6, 1.570796, 1.047198, 0.523599}, 
+        {1, 60, 3600, 0.001, 1E-6, 86400, 604800, 3.1536E7, 3.1536E8}, 
+        {1, 0.01745329, 0.1047198, 6.283185, 4.8481E-6, 0.0166667, 0.0157079, 0.0002908, 0.0002777}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Angular Acceleration", new String[]{"Δ Ang. Velocity", "Time (t)", "Ang. Accel (α)"},
+    new String[][]{
+        {"rad/s", "deg/s", "rpm", "rev/s", "grad/s", "rev/min", "deg/min", "rad/min", "deg/hr"}, 
+        {"s", "min", "hr", "ms", "μs", "ns", "day", "wk"}, 
+        {"rad/s²", "deg/s²", "rpm/s", "rev/s²", "rpm/min", "deg/hr²", "rad/min²", "rev/min²", "rad/hr²"}
+    },
+    new double[][]{
+        {1, 0.01745329, 0.1047198, 6.283185, 0.0157079, 0.1047198, 0.0002908, 0.0166667, 4.8481E-6}, 
+        {1, 60, 3600, 0.001, 1E-6, 1E-9, 86400, 604800}, 
+        {1, 0.01745329, 0.1047198, 6.283185, 0.0017453, 1.3466E-9, 0.0002777, 0.0017453, 7.716E-8}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Moment of Inertia", new String[]{"Mass (m)", "Radius (r)", "Inertia (I)"},
+    new String[][]{
+        {"kg", "g", "mg", "μg", "lb", "oz", "slug", "ton (m)", "ton (US)", "st", "ct", "u", "Solar Mass"}, 
+        {"m", "cm", "mm", "μm", "nm", "in", "ft", "yd", "mi", "nmi", "Å", "fathom", "rod"}, 
+        {"kg·m²", "g·cm²", "lb·ft²", "lb·in²", "slug·ft²", "oz·in²", "kg·cm²", "mg·mm²", "ton·m²", "g·m²"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-9, 0.453592, 0.028349, 14.5939, 1000, 907.185, 6.35029, 0.0002, 1.6605E-27, 1.988E30}, 
+        {1, 0.01, 0.001, 1E-6, 1E-9, 0.0254, 0.3048, 0.9144, 1609.34, 1852, 1E-10, 1.8288, 5.0292}, 
+        {1, 1E-7, 1.355818, 0.0002926, 1.355818, 1.829E-5, 0.0001, 1E-12, 1000, 0.001}
+    },
+    (v, t) -> t == 2 ? v[0] * Math.pow(v[1], 2) : (t == 1 ? Math.sqrt(v[2] / v[0]) : v[2] / Math.pow(v[1], 2)));
+    addFormula("Frequency", new String[]{"Period (T)", "Const (1)", "Frequency (f)"},
+    new String[][]{
+        {"s", "ms", "μs", "ns", "ps", "fs", "min", "hr", "day", "wk", "yr", "decade"}, 
+        {"-"}, 
+        {"Hz", "kHz", "MHz", "GHz", "THz", "PHz", "EHz", "rpm", "deg/s", "rad/s", "grad/s"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-9, 1E-12, 1E-15, 60, 3600, 86400, 604800, 3.1536E7, 3.1536E8}, 
+        {1}, 
+        {1, 1000, 1E6, 1E9, 1E12, 1E15, 1E18, 0.016667, 0.002778, 0.159155, 0.0025}
+    },
+    (v, t) -> t == 2 ? 1 / v[0] : 1 / v[2]);
+
+addFormula("Viscosity (Dynamic)", new String[]{"Shear Stress", "Shear Rate", "Viscosity"},
+    new String[][]{
+        {"Pa", "kPa", "mPa", "psi", "bar", "atm", "torr", "dyn/cm²", "kgf/m²"}, 
+        {"1/s", "1/min", "1/hr", "1/ms"}, 
+        {"Pa·s", "P (Poise)", "cP", "lb·s/ft²", "kg/(m·s)", "mPa·s", "lb·s/in²", "reyn"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 6894.76, 100000, 101325, 133.32, 0.1, 9.806}, 
+        {1, 0.0166, 0.000277, 1000}, 
+        {1, 0.1, 0.001, 47.8803, 1, 0.001, 6894.7, 6894.7}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Specific Heat Capacity", new String[]{"Energy", "Mass × ΔTemp", "Spec. Heat"},
+    new String[][]{
+        {"J", "kJ", "MJ", "cal", "kcal", "BTU", "Wh", "kWh", "erg"}, 
+        {"kg·K", "g·K", "kg·°C", "lb·°F", "g·°C", "lb·°C"}, 
+        {"J/(kg·K)", "kJ/(kg·K)", "cal/(g·°C)", "kcal/(kg·°C)", "BTU/(lb·°F)", "J/(g·K)"}
+    },
+    new double[][]{
+        {1, 1000, 1E6, 4.184, 4184, 1055.06, 3600, 3.6E6, 1E-7}, 
+        {1, 0.001, 1, 0.252, 0.001, 0.4536}, 
+        {1, 1000, 4184, 4184, 4186.8, 1000}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Thermal Conductivity", new String[]{"Power", "Length × ΔTemp", "Conductivity"},
+    new String[][]{
+        {"W", "kW", "MW", "cal/s", "kcal/h", "BTU/h", "ft·lb/s"}, 
+        {"m·K", "cm·K", "mm·K", "in·K", "ft·°F"}, 
+        {"W/(m·K)", "W/(cm·K)", "cal/(s·cm·°C)", "kcal/(h·m·°C)", "BTU/(h·ft·°F)", "BTU·in/(h·ft²·°F)"}
+    },
+    new double[][]{
+        {1, 1000, 1E6, 4.184, 1.163, 0.29307, 1.3558}, 
+        {1, 0.01, 0.001, 0.0254, 0.1693}, 
+        {1, 100, 418.4, 1.163, 1.7307, 0.1442}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Volumetric Flow Rate", new String[]{"Volume", "Time", "Flow Rate"},
+    new String[][]{
+        {"m³", "L", "mL", "cm³", "ft³", "in³", "gal", "qt", "pt", "fl oz", "bbl"}, 
+        {"s", "min", "hr", "ms", "day", "yr"}, 
+        {"m³/s", "m³/h", "L/s", "L/min", "L/h", "ft³/s", "ft³/min", "gpm (US)", "gph (US)", "cm³/s", "mL/min"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1E-6, 0.0283168, 1.6387E-5, 0.0037854, 0.000946, 0.000473, 2.957E-5, 0.15898}, 
+        {1, 60, 3600, 0.001, 86400, 3.1536E7}, 
+        {1, 0.0002778, 0.001, 1.666E-5, 2.777E-7, 0.0283168, 0.0004719, 6.309E-5, 1.051E-6, 1E-6, 1.666E-8}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+    addFormula("Radioactivity", new String[]{"Decays", "Time", "Activity"},
+    new String[][]{
+        {"counts", "decays", "particles", "events"}, 
+        {"s", "min", "hr", "day", "yr", "ms", "μs", "ns", "wk"}, 
+        {"Bq", "kBq", "MBq", "GBq", "TBq", "Ci", "mCi", "μCi", "nCi", "pCi", "Rd", "kRd", "MRd", "dps", "dpm"}
+    },
+    new double[][]{
+        {1, 1, 1, 1}, 
+        {1, 60, 3600, 86400, 3.1536E7, 0.001, 1E-6, 1E-9, 604800}, 
+        {1, 1000, 1E6, 1E9, 1E12, 3.7E10, 3.7E7, 3.7E4, 37, 0.037, 1E6, 1E9, 1E12, 1, 0.016667}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Absorbed Dose", new String[]{"Energy", "Mass", "Dose"},
+    new String[][]{
+        {"J", "kJ", "mJ", "μJ", "cal", "kcal", "erg", "Wh", "eV", "MeV"}, 
+        {"kg", "g", "mg", "μg", "lb", "oz", "ton (m)", "st"}, 
+        {"Gy", "mGy", "μGy", "nGy", "rad", "mrad", "μrad", "erg/g", "J/kg"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 1E-6, 4.184, 4184, 1E-7, 3600, 1.602E-19, 1.602E-13}, 
+        {1, 0.001, 1E-6, 1E-9, 0.453592, 0.028349, 1000, 6.35029}, 
+        {1, 0.001, 1E-6, 1E-9, 0.01, 0.0001, 1E-5, 0.0001, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Dose Equivalent", new String[]{"Absorbed Dose", "Quality Factor (Q)", "Dose Equiv."},
+    new String[][]{
+        {"Gy", "mGy", "μGy", "rad", "mrad"}, 
+        {"-"}, 
+        {"Sv", "mSv", "μSv", "nSv", "rem", "mrem", "μrem"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 0.01, 0.0001}, 
+        {1}, 
+        {1, 0.001, 1E-6, 1E-9, 0.01, 0.0001, 1E-5}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Illuminance", new String[]{"Luminous Flux", "Area", "Illuminance"},
+    new String[][]{
+        {"lm (lumen)", "mlm", "klm"}, 
+        {"m²", "cm²", "mm²", "ft²", "in²", "yd²"}, 
+        {"lx (lux)", "fc (foot-candle)", "ph (phot)", "nox", "lm/m²", "lm/ft²"}
+    },
+    new double[][]{
+        {1, 0.001, 1000}, 
+        {1, 1E-4, 1E-6, 0.0929, 0.000645, 0.8361}, 
+        {1, 10.7639, 10000, 0.001, 1, 10.7639}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Optical Power", new String[]{"Const (1)", "Focal Length", "Optical Power"},
+    new String[][]{
+        {"-"}, 
+        {"m", "cm", "mm", "in", "ft"}, 
+        {"D (dioptre)", "1/m", "1/cm", "1/in"}
+    },
+    new double[][]{
+        {1}, 
+        {1, 0.01, 0.001, 0.0254, 0.3048}, 
+        {1, 1, 100, 39.3701}
+    },
+    (v, t) -> t == 2 ? 1 / v[1] : 1 / v[2]);
+    addFormula("Bernoulli's Equation", new String[]{"Pressure + 0.5ρv²", "ρgh", "Total Constant"},
+    new String[][]{
+        {"Pa", "kPa", "psi", "bar", "atm"}, 
+        {"Pa", "kPa", "psi", "bar", "atm"}, 
+        {"Pa", "kPa", "psi", "bar", "atm"}
+    },
+    new double[][]{
+        {1, 1000, 6894.76, 100000, 101325}, 
+        {1, 1000, 6894.76, 100000, 101325}, 
+        {1, 1000, 6894.76, 100000, 101325}
+    },
+    (v, t) -> t == 2 ? v[0] + v[1] : (t == 1 ? v[2] - v[0] : v[2] - v[1]));
+
+addFormula("Brewster's Angle", new String[]{"n2 (Refractive Index)", "n1 (Refractive Index)", "Angle (θb)"},
+    new String[][]{
+        {"index"}, {"index"}, {"rad", "deg", "grad"}
+    },
+    new double[][]{
+        {1}, {1}, {1, 0.017453, 0.015708}
+    },
+    (v, t) -> t == 2 ? Math.atan(v[0] / v[1]) : (t == 0 ? v[1] * Math.tan(v[2]) : v[0] / Math.tan(v[2])));
+
+addFormula("Buoyancy", new String[]{"Fluid Density", "Displaced Vol", "Buoyant Force"},
+    new String[][]{
+        {"kg/m³", "g/cm³", "lb/ft³"}, {"m³", "L", "ft³", "cm³"}, {"N", "lbf", "kgf", "dyn"}
+    },
+    new double[][]{
+        {1, 1000, 16.018}, {1, 0.001, 0.0283, 1E-6}, {1, 4.448, 9.806, 1E-5}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] * 9.80665 : (t == 1 ? v[2] / (v[0] * 9.80665) : v[2] / (v[1] * 9.80665)));
+
+addFormula("Drag Equation", new String[]{"Drag Coeff × Area", "0.5 × Density × v²", "Drag Force"},
+    new String[][]{
+        {"m²", "cm²", "ft²", "in²"}, {"Pa", "kPa", "psi", "bar"}, {"N", "lbf", "kN", "dyn"}
+    },
+    new double[][]{
+        {1, 0.0001, 0.0929, 0.000645}, {1, 1000, 6894.76, 100000}, {1, 4.448, 1000, 1E-5}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Freefall Distance", new String[]{"Gravity (g)", "Time (t)", "Distance (h)"},
+    new String[][]{
+        {"m/s²", "ft/s²", "g-unit"}, {"s", "min", "ms"}, {"m", "ft", "km", "mi"}
+    },
+    new double[][]{
+        {1, 0.3048, 9.806}, {1, 60, 0.001}, {1, 0.3048, 1000, 1609.34}
+    },
+    (v, t) -> t == 2 ? 0.5 * v[0] * Math.pow(v[1], 2) : (t == 1 ? Math.sqrt((2 * v[2]) / v[0]) : (2 * v[2]) / Math.pow(v[1], 2)));
+
+addFormula("Friction Force", new String[]{"Coeff (μ)", "Normal Force", "Friction Force"},
+    new String[][]{
+        {"coeff"}, {"N", "lbf", "kgf", "kN"}, {"N", "lbf", "kgf", "kN"}
+    },
+    new double[][]{
+        {1}, {1, 4.448, 9.806, 1000}, {1, 4.448, 9.806, 1000}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Froude Number", new String[]{"Velocity", "sqrt(g × Length)", "Fr Number"},
+    new String[][]{
+        {"m/s", "km/h", "mph", "ft/s"}, {"m/s", "km/h", "mph", "ft/s"}, {"ratio"}
+    },
+    new double[][]{
+        {1, 0.277, 0.447, 0.3048}, {1, 0.277, 0.447, 0.3048}, {1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 0 ? v[2] * v[1] : v[0] / v[2]));
+
+addFormula("Hydraulic Radius", new String[]{"Area", "Wetted Perimeter", "Radius (Rh)"},
+    new String[][]{
+        {"m²", "cm²", "ft²", "in²"}, {"m", "cm", "ft", "in"}, {"m", "cm", "ft", "in"}
+    },
+    new double[][]{
+        {1, 1E-4, 0.0929, 0.000645}, {1, 0.01, 0.3048, 0.0254}, {1, 0.01, 0.3048, 0.0254}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Hydrostatic Pressure", new String[]{"Density × Gravity", "Depth (h)", "Pressure"},
+    new String[][]{
+        {"N/m³", "lb/ft³", "kgf/m³"}, {"m", "ft", "cm", "in"}, {"Pa", "kPa", "psi", "bar", "atm"}
+    },
+    new double[][]{
+        {1, 157.08, 9.806}, {1, 0.3048, 0.01, 0.0254}, {1, 1000, 6894.76, 100000, 101325}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Refractive Index", new String[]{"Speed in Vacuum (c)", "Speed in Medium (v)", "Index (n)"},
+    new String[][]{
+        {"m/s", "km/s", "c"}, {"m/s", "km/s", "c"}, {"index"}
+    },
+    new double[][]{
+        {1, 1000, 299792458}, {1, 1000, 299792458}, {1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Kinetic Energy", new String[]{"Mass", "Velocity", "Energy (K)"},
+    new String[][]{
+        {"kg", "g", "lb", "slug"}, {"m/s", "km/h", "mph", "ft/s"}, {"J", "kJ", "cal", "eV", "BTU", "ft-lb"}
+    },
+    new double[][]{
+        {1, 0.001, 0.453, 14.59}, {1, 0.277, 0.447, 0.3048}, {1, 1000, 4.184, 1.6E-19, 1055, 1.355}
+    },
+    (v, t) -> t == 2 ? 0.5 * v[0] * Math.pow(v[1], 2) : (t == 1 ? Math.sqrt((2 * v[2]) / v[0]) : (2 * v[2]) / Math.pow(v[1], 2)));
+
+addFormula("Potential Energy", new String[]{"Mass", "Gravity × Height", "Energy (U)"},
+    new String[][]{
+        {"kg", "g", "lb"}, {"J/kg", "ft-lb/lb"}, {"J", "kJ", "cal", "BTU", "ft-lb"}
+    },
+    new double[][]{
+        {1, 0.001, 0.453}, {1, 2.989}, {1, 1000, 4.184, 1055, 1.355}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Knudsen Number", new String[]{"Mean Free Path", "Length Scale (L)", "Kn Number"},
+    new String[][]{
+        {"m", "μm", "nm", "Å"}, {"m", "cm", "mm", "μm"}, {"ratio"}
+    },
+    new double[][]{
+        {1, 1E-6, 1E-9, 1E-10}, {1, 0.01, 0.001, 1E-6}, {1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Length Contraction", new String[]{"Proper Length (L0)", "Lorentz Factor (γ)", "Observed (L)"},
+    new String[][]{
+        {"m", "km", "ly", "AU"}, {"gamma"}, {"m", "km", "ly", "AU"}
+    },
+    new double[][]{
+        {1, 1000, 9.46E15, 1.49E11}, {1}, {1, 1000, 9.46E15, 1.49E11}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Lightning Distance", new String[]{"Time (Thunder)", "Speed of Sound", "Distance"},
+    new String[][]{
+        {"s", "ms"}, {"m/s", "km/h", "mph", "ft/s"}, {"m", "km", "ft", "mi"}
+    },
+    new double[][]{
+        {1, 0.001}, {1, 0.277, 0.447, 0.3048}, {1, 1000, 0.3048, 1609}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Malus' Law", new String[]{"Initial Intensity", "cos²(θ)", "Final Intensity"},
+    new String[][]{
+        {"W/m²", "lux"}, {"ratio"}, {"W/m²", "lux"}
+    },
+    new double[][]{
+        {1, 1}, {1}, {1, 1}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Period of Pendulum", new String[]{"Length (L)", "Gravity (g)", "Period (T)"},
+    new String[][]{
+        {"m", "cm", "ft", "in"}, {"m/s²", "ft/s²", "g-unit"}, {"s", "min", "ms"}
+    },
+    new double[][]{
+        {1, 0.01, 0.3048, 0.0254}, {1, 0.3048, 9.806}, {1, 60, 0.001}
+    },
+    (v, t) -> t == 2 ? 2 * Math.PI * Math.sqrt(v[0] / v[1]) : (t == 0 ? (Math.pow(v[2] / (2 * Math.PI), 2)) * v[1] : v[0] / Math.pow(v[2] / (2 * Math.PI), 2)));
+
+addFormula("Poisson's Ratio", new String[]{"Lateral Strain", "Axial Strain", "Poisson's (ν)"},
+    new String[][]{
+        {"strain"}, {"strain"}, {"ratio"}
+    },
+    new double[][]{
+        {1}, {1}, {1}
+    },
+    (v, t) -> t == 2 ? -v[0] / v[1] : (t == 1 ? -v[0] / v[2] : -v[1] * v[2]));
+
+addFormula("Reduced Mass", new String[]{"m1 × m2", "m1 + m2", "Reduced Mass (μ)"},
+    new String[][]{
+        {"kg²", "g²", "lb²"}, {"kg", "g", "lb"}, {"kg", "g", "lb", "u"}
+    },
+    new double[][]{
+        {1, 1E-6, 0.205}, {1, 0.001, 0.453}, {1, 0.001, 0.453, 1.66E-27}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 0 ? v[2] * v[1] : v[0] / v[2]));
+
+addFormula("Rotational K.E.", new String[]{"Inertia (I)", "Ang. Vel (ω)", "Energy (K_rot)"},
+    new String[][]{
+        {"kg·m²", "lb·ft²"}, {"rad/s", "rpm", "deg/s"}, {"J", "kJ", "cal", "ft-lb"}
+    },
+    new double[][]{
+        {1, 0.042}, {1, 0.1047, 0.0174}, {1, 1000, 4.184, 1.355}
+    },
+    (v, t) -> t == 2 ? 0.5 * v[0] * Math.pow(v[1], 2) : (t == 1 ? Math.sqrt((2 * v[2]) / v[0]) : (2 * v[2]) / Math.pow(v[1], 2)));
+
+addFormula("Stress", new String[]{"Force", "Area", "Stress (σ)"},
+    new String[][]{
+        {"N", "kN", "lbf", "kgf"}, {"m²", "mm²", "in²", "ft²"}, {"Pa", "MPa", "psi", "ksi", "bar"}
+    },
+    new double[][]{
+        {1, 1000, 4.448, 9.806}, {1, 1E-6, 0.000645, 0.0929}, {1, 1E6, 6894.76, 6894757, 100000}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Strain", new String[]{"Δ Length", "Original Length", "Strain (ε)"},
+    new String[][]{
+        {"m", "cm", "mm", "in"}, {"m", "cm", "mm", "in"}, {"unitless", "percent", "microstrain"}
+    },
+    new double[][]{
+        {1, 0.01, 0.001, 0.0254}, {1, 0.01, 0.001, 0.0254}, {1, 0.01, 1E-6}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+    }
+
+    private static void addFormula(String name, String[] l, String[][] u, double[][] f, java.util.function.BiFunction<double[], Integer, Double> s) {
+        physicsRegistry.put(name, new PhysData(l, u, f, s));
+    }
+
+    // --- 3. THE UI BUILDER ---
+    public static JPanel createPhysicsPanel() {
+        JPanel main = new JPanel(new BorderLayout(0, 0));
+        main.setBackground(currentTheme.bgColor);
+
+        JPanel leftSide = new JPanel(new BorderLayout(0, 20));
+        leftSide.setBackground(currentTheme.bgColor);
+        leftSide.setBorder(BorderFactory.createEmptyBorder(30, 25, 30, 15));
+
+        physicsSelector = new JComboBox<>(physicsRegistry.keySet().toArray(new String[0]));
+        styleScientificSelector(physicsSelector);
+
+        JPanel inputContainer = new JPanel(new GridLayout(3, 1, 0, 25));
+        inputContainer.setBackground(currentTheme.bgColor);
+
+        // Create fields with "Converter" style
+        pf1 = createField(0, false); pf2 = createField(1, false); pf3 = createField(2, true);
+        pu1 = createUnitCombo(); pu2 = createUnitCombo(); pu3 = createUnitCombo();
+        pl1 = createLabel(); pl2 = createLabel(); pl3 = createLabel();
+
+        inputContainer.add(assemblePhysicsRow(pl1, pf1, pu1));
+        inputContainer.add(assemblePhysicsRow(pl2, pf2, pu2));
+        inputContainer.add(assemblePhysicsRow(pl3, pf3, pu3));
+
+        physicsSelector.addActionListener(e -> updatePhysicsSelection());
+        updatePhysicsSelection(); 
+
+        leftSide.add(physicsSelector, BorderLayout.NORTH);
+        leftSide.add(inputContainer, BorderLayout.CENTER);
+
+        // Keypad on the Right
+        JPanel keypad = createKeypad(val -> handleScientificInput(val, true));
+        keypad.setPreferredSize(new Dimension(280, 0));
+
+        main.add(leftSide, BorderLayout.CENTER);
+        main.add(keypad, BorderLayout.EAST);
+        return main;
+    }
+
+    // --- 4. HELPER & LOGIC METHODS ---
+    private static void updatePhysicsSelection() {
+        isInternalUpdate = true;
+        PhysData data = physicsRegistry.get(physicsSelector.getSelectedItem());
+        pl1.setText(data.labels[0]); pl2.setText(data.labels[1]); pl3.setText(data.labels[2]);
+        
+        setupCombo(pu1, data.units[0]);
+        setupCombo(pu2, data.units[1]);
+        setupCombo(pu3, data.units[2]);
+        
+        pf1.setText(""); pf2.setText(""); pf3.setText("");
+        isInternalUpdate = false;
+    }
+
+    private static void runCalculation() {
+        if (isInternalUpdate) return;
+        PhysData data = physicsRegistry.get(physicsSelector.getSelectedItem());
+        try {
+            double v1 = parse(pf1.getText()) * data.factors[0][pu1.getSelectedIndex()];
+            double v2 = parse(pf2.getText()) * data.factors[1][pu2.getSelectedIndex()];
+            double v3 = parse(pf3.getText()) * data.factors[2][pu3.getSelectedIndex()];
+
+            int target = (activeFieldIdx == 2) ? 0 : 2; 
+            double result = data.solver.apply(new double[]{v1, v2, v3}, target);
+
+            isInternalUpdate = true;
+            String output = format(result / data.factors[target][(target == 0 ? pu1 : pu3).getSelectedIndex()]);
+            if (target == 0) pf1.setText(output); else pf3.setText(output);
+            isInternalUpdate = false;
+        } catch (Exception e) {}
+    }
+
+    private static JPanel assemblePhysicsRow(JLabel l, JTextField f, JComboBox<String> u) {
+        JPanel p = new JPanel(new BorderLayout(10, 5));
+        p.setBackground(currentTheme.bgColor);
+        p.add(l, BorderLayout.NORTH);
+        p.add(f, BorderLayout.CENTER);
+        p.add(u, BorderLayout.EAST);
+        return p;
+    }
+
+    private static JTextField createField(int idx, boolean isDerived) {
+        JTextField f = new JTextField();
+        f.setBackground(currentTheme.bgColor);
+        f.setForeground(isDerived ? new Color(0, 255, 255) : currentTheme.foreground);
+        f.setCaretColor(new Color(0, 150, 255));
+        f.setFont(new Font("SansSerif", Font.PLAIN, 22));
+        // No box border, only bottom line
+        f.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(60, 60, 60)));
+        
+        f.addFocusListener(new FocusAdapter() { 
+            @Override public void focusGained(FocusEvent e) { 
+                activeFieldIdx = idx; 
+                f.setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(0, 150, 255)));
+            }
+            @Override public void focusLost(FocusEvent e) {
+                f.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(60, 60, 60)));
+            }
+        });
+        f.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { runCalculation(); }
+            public void removeUpdate(DocumentEvent e) { runCalculation(); }
+            public void changedUpdate(DocumentEvent e) { runCalculation(); }
+        });
+        return f;
+    }
+
+    private static JComboBox<String> createUnitCombo() {
+        JComboBox<String> cb = new JComboBox<>();
+        cb.setBackground(currentTheme.bgColor);
+        cb.setForeground(currentTheme.foreground);
+        cb.setBorder(BorderFactory.createEmptyBorder());
+        cb.addActionListener(e -> runCalculation());
+        return cb;
+    }
+
+    private static void setupCombo(JComboBox<String> cb, String[] items) {
+        cb.removeAllItems();
+        for (String s : items) cb.addItem(s);
+    }
+
+    private static void styleScientificSelector(JComboBox<String> cb) {
+        cb.setBackground(currentTheme.functionButton);
+        cb.setForeground(currentTheme.foreground);
+        cb.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+    }
+
+    private static JLabel createLabel() {
+        JLabel l = new JLabel();
+        l.setForeground(new Color(120, 120, 120));
+        l.setFont(new Font("SansSerif", Font.BOLD, 12));
+        return l;
+    }
+
+    private static double parse(String s) {
+        try { return s.isEmpty() ? 0 : Double.parseDouble(s); } catch (Exception e) { return 0; }
+    }
+
+    private static String format(double d) {
+        if (Double.isInfinite(d) || Double.isNaN(d)) return "0";
+        return String.format("%.4f", d).replaceAll("0*$", "").replaceAll("\\.$", "");
+    }
     
+
+    static class ChemData {
+        String[] labels;
+        String[][] units;
+        double[][] factors;
+        double[] offsets; 
+        java.util.function.BiFunction<double[], Integer, Double> solver;
+
+        ChemData(String[] l, String[][] u, double[][] f, double[] o, java.util.function.BiFunction<double[], Integer, Double> s) {
+            this.labels = l; this.units = u; this.factors = f; this.offsets = o; this.solver = s;
+        }
+    }
+
+    private static void initializeChemistryData() {
+        // --- CHEMISTRY REGISTRY ---
+
+        addFormula("Molar Energy", new String[]{"Total Energy", "Amount of Substance", "Molar Energy"},
+    new String[][]{
+        {"J", "kJ", "MJ", "cal", "kcal", "eV", "BTU"}, 
+        {"mol", "mmol", "μmol", "kmol"}, 
+        {"J/mol", "kJ/mol", "cal/mol", "kcal/mol", "kJ/kmol"}
+    },
+    new double[][]{
+        {1, 1000, 1E6, 4.184, 4184, 1.602E-19, 1055.06}, 
+        {1, 0.001, 1E-6, 1000}, 
+        {1, 1000, 4.184, 4184, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Atom Calculator", new String[]{"Moles", "Avogadro's Constant", "Number of Atoms"},
+    new String[][]{
+        {"mol", "mmol", "μmol", "kmol"}, 
+        {"6.022E23"}, 
+        {"atoms", "molecules", "particles"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1000}, 
+        {6.02214076E23}, 
+        {1}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Reaction Rate", new String[]{"Δ Concentration", "Δ Time", "Reaction Rate"},
+    new String[][]{
+        {"M", "mM", "μM", "mol/L", "mol/m³"}, 
+        {"s", "min", "hr", "ms"}, 
+        {"M/s", "M/min", "M/hr", "mol/(L·s)", "mol/(m³·s)"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1, 0.001}, 
+        {1, 60, 3600, 0.001}, 
+        {1, 0.016667, 0.0002778, 1, 0.001}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Boyle's Law", new String[]{"Initial P × V", "Final Pressure", "Final Volume"},
+    new String[][]{
+        {"unit-constant"}, 
+        {"Pa", "kPa", "bar", "atm", "psi", "torr", "mmHg"}, 
+        {"L", "mL", "m³", "cm³", "ft³", "gal"}
+    },
+    new double[][]{
+        {1}, 
+        {1, 1000, 100000, 101325, 6894.76, 133.322, 133.322}, 
+        {1, 0.001, 1000, 0.001, 28.3168, 3.7854}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Charles's Law", new String[]{"Initial V / T", "Final Temperature", "Final Volume"},
+    new String[][]{
+        {"unit-constant"}, 
+        {"K", "°C (abs)", "°F (abs)", "°R"}, 
+        {"L", "mL", "m³", "cm³", "ft³", "in³"}
+    },
+    new double[][]{
+        {1}, 
+        {1, 1, 0.5555, 0.5555}, 
+        {1, 0.001, 1000, 0.001, 28.3168, 0.01638}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Combined Gas Law", new String[]{"P1·V1 / T1", "Final P × V", "Final Temp"},
+    new String[][]{
+        {"unit-constant"}, 
+        {"J", "L·atm", "cal", "ft·lb"}, 
+        {"K", "°C (abs)", "°F (abs)", "°R"}
+    },
+    new double[][]{
+        {1}, 
+        {1, 101.325, 4.184, 1.3558}, 
+        {1, 1, 0.5555, 0.5555}
+    },
+    (v, t) -> t == 2 ? v[1] / v[0] : (t == 1 ? v[0] * v[2] : v[1] / v[2]));
+            addFormula("Density (Chemistry)", new String[]{"Mass", "Volume", "Density"},
+    new String[][]{
+        {"g", "kg", "mg", "μg", "lb", "oz"}, 
+        {"cm³", "mL", "L", "m³", "dm³", "μL", "fl oz"}, 
+        {"g/cm³", "g/mL", "kg/m³", "g/L", "mg/mL", "lb/ft³"}
+    },
+    new double[][]{
+        {1, 1000, 0.001, 1E-6, 453.59, 28.35}, 
+        {1, 1, 1000, 1E6, 1000, 0.001, 29.57}, 
+        {1, 1, 0.001, 0.001, 1, 0.01602}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Molarity", new String[]{"Moles of Solute", "Volume of Solution", "Molarity (M)"},
+    new String[][]{
+        {"mol", "mmol", "μmol", "kmol"}, 
+        {"L", "mL", "cm³", "dm³", "m³", "μL"}, 
+        {"mol/L (M)", "mmol/L", "mol/m³", "M (molar)"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 1000}, 
+        {1, 0.001, 0.001, 1, 1000, 1E-6}, 
+        {1, 0.001, 0.001, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Molality", new String[]{"Moles of Solute", "Mass of Solvent", "Molality (m)"},
+    new String[][]{
+        {"mol", "mmol", "μmol"}, 
+        {"kg", "g", "mg", "lb"}, 
+        {"mol/kg (m)", "mmol/g", "mol/lb"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6}, 
+        {1, 0.001, 1E-6, 0.4536}, 
+        {1, 1, 2.2046}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Mole Fraction", new String[]{"Moles of Component", "Total Moles", "Mole Fraction (χ)"},
+    new String[][]{
+        {"mol", "mmol"}, {"mol", "mmol"}, {"ratio", "percent"}
+    },
+    new double[][]{
+        {1, 0.001}, {1, 0.001}, {1, 0.01}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Ideal Gas Law", new String[]{"Pressure × Volume", "Moles × Temp", "Gas Constant (R)"},
+    new String[][]{
+        {"J", "L·atm", "cm³·atm", "m³·Pa"}, 
+        {"mol·K", "mol·°C (abs)"}, 
+        {"J/(mol·K)", "L·atm/(mol·K)", "cal/(mol·K)", "m³·Pa/(mol·K)"}
+    },
+    new double[][]{
+        {1, 101.325, 0.1013, 1}, 
+        {1, 1}, 
+        {1, 0.08206, 1.987, 1}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+
+addFormula("Mass Percent", new String[]{"Mass of Solute", "Mass of Solution", "Mass %"},
+    new String[][]{
+        {"g", "kg", "mg"}, {"g", "kg", "mg"}, {"%", "fraction", "ppm", "ppb"}
+    },
+    new double[][]{
+        {1, 1000, 0.001}, {1, 1000, 0.001}, {1, 100, 0.0001, 1E-7}
+    },
+    (v, t) -> t == 2 ? (v[0] / v[1]) * 100 : (t == 1 ? (v[0] * 100) / v[2] : (v[2] * v[1]) / 100));
+
+addFormula("Beer-Lambert Law", new String[]{"Molar Absorptivity × Path", "Concentration", "Absorbance (A)"},
+    new String[][]{
+        {"L/(mol·cm)·cm"}, {"mol/L (M)", "mM"}, {"absorbance"}
+    },
+    new double[][]{
+        {1}, {1, 0.001}, {1}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("pH / pOH", new String[]{"-log10", "Ion Concentration", "pH or pOH"},
+    new String[][]{
+        {"-"}, {"mol/L", "M", "mM", "μM"}, {"scale"}
+    },
+    new double[][]{
+        {1}, {1, 1, 0.001, 1E-6}, {1}
+    },
+    (v, t) -> t == 2 ? -Math.log10(v[1]) : (t == 1 ? Math.pow(10, -v[2]) : 0));
+
+addFormula("Rate Law (General)", new String[]{"Rate Constant (k)", "Concentration Product", "Reaction Rate"},
+    new String[][]{
+        {"units vary"}, {"M^n"}, {"M/s", "M/min", "mol/(L·s)"}
+    },
+    new double[][]{
+        {1}, {1}, {1, 0.0166, 1}
+    },
+    (v, t) -> t == 2 ? v[0] * v[1] : (t == 1 ? v[2] / v[0] : v[2] / v[1]));
+
+addFormula("Specific Volume", new String[]{"Volume", "Mass", "Spec. Vol (v)"},
+    new String[][]{
+        {"m³", "L", "cm³", "ft³"}, {"kg", "g", "lb", "mg"}, {"m³/kg", "L/kg", "cm³/g", "ft³/lb"}
+    },
+    new double[][]{
+        {1, 0.001, 1E-6, 0.0283}, {1, 0.001, 0.4536, 1E-6}, {1, 0.001, 1, 0.0624}
+    },
+    (v, t) -> t == 2 ? v[0] / v[1] : (t == 1 ? v[0] / v[2] : v[1] * v[2]));
+    }
+
+    private static void addChem(String name, String[] l, String[][] u, double[][] f, java.util.function.BiFunction<double[], Integer, Double> s) {
+        chemRegistry.put(name, new ChemData(l, u, f, new double[]{0,0,0}, s));
+    }
+
+    public static JPanel createChemistryPanel() {
+        JPanel main = new JPanel(new BorderLayout(0, 0));
+        main.setBackground(currentTheme.bgColor);
+
+        JPanel leftSide = new JPanel(new BorderLayout(0, 20));
+        leftSide.setBackground(currentTheme.bgColor);
+        leftSide.setBorder(BorderFactory.createEmptyBorder(30, 25, 30, 15));
+
+        chemSelector = new JComboBox<>(chemRegistry.keySet().toArray(new String[0]));
+        styleScientificSelector(chemSelector);
+
+        JPanel inputContainer = new JPanel(new GridLayout(3, 1, 0, 25));
+        inputContainer.setBackground(currentTheme.bgColor);
+
+        cf1 = createChemField(0, false); cf2 = createChemField(1, false); cf3 = createChemField(2, true);
+        cu1 = createChemUnitCombo(); cu2 = createChemUnitCombo(); cu3 = createChemUnitCombo();
+        cl1 = createLabel(); cl2 = createLabel(); cl3 = createLabel();
+
+        inputContainer.add(assembleRow(cl1, cf1, cu1));
+        inputContainer.add(assembleRow(cl2, cf2, cu2));
+        inputContainer.add(assembleRow(cl3, cf3, cu3));
+
+        chemSelector.addActionListener(e -> updateChemSelection());
+        updateChemSelection();
+
+        leftSide.add(chemSelector, BorderLayout.NORTH);
+        leftSide.add(inputContainer, BorderLayout.CENTER);
+
+        // Keypad on the Right
+        JPanel keypad = createKeypad(val -> handleScientificInput(val, false));
+        keypad.setPreferredSize(new Dimension(280, 0));
+
+        main.add(leftSide, BorderLayout.CENTER);
+        main.add(keypad, BorderLayout.EAST);
+       
+        main.revalidate(); 
+        main.repaint();
+        updateChemSelection();
+        return main;
+    }
+    class FormulaData {
+    String name;
+    String[] variables;
+    String[][] units;
+    double[][] conversions;
+    java.util.function.BiFunction<double[], Integer, Double> calculation;
+
+    FormulaData(String name, String[] vars, String[][] u, double[][] c, java.util.function.BiFunction<double[], Integer, Double> calc) {
+        this.name = name;
+        this.variables = vars;
+        this.units = u;
+        this.conversions = c;
+        this.calculation = calc;
+    }
+    }
+
+    private static void updateChemSelection() {
+    Object selected = chemSelector.getSelectedItem();
+    
+    // 1. If nothing is selected, we still want to see the UI, just empty.
+    if (selected == null) {
+        // Clear labels so it doesn't look 'stuck'
+        cl1.setText(""); cl2.setText(""); cl3.setText("");
+        return; 
+    }
+
+    isChemInternalUpdate = true;
+    
+    try {
+        ChemData data = chemRegistry.get(selected);
+        if (data != null) {
+            // 2. Set the Labels (This makes it look like the Physics panel)
+            cl1.setText(data.labels[0]); 
+            cl2.setText(data.labels[1]); 
+            cl3.setText(data.labels[2]);
+
+            // 3. Set the Units
+            setupCombo(cu1, data.units[0]); 
+            setupCombo(cu2, data.units[1]); 
+            setupCombo(cu3, data.units[2]);
+
+            // 4. Clear the fields for new input
+            cf1.setText(""); cf2.setText(""); cf3.setText("");
+        }
+    } finally {
+        isChemInternalUpdate = false;
+    }
+
+    // 5. THE MISSING PIECE: Force the panel to refresh its look
+    if (createChemistryPanel() != null) {
+        createChemistryPanel().revalidate();
+        createChemistryPanel().repaint();
+    }
+    }
+
+    private static void runChemCalc() {
+    if (isChemInternalUpdate) return;
+
+    // 1. Get the selected items first
+    Object selectedChem = chemSelector.getSelectedItem();
+    Object unit1 = cu1.getSelectedItem();
+    Object unit2 = cu2.getSelectedItem();
+    Object unit3 = cu3.getSelectedItem();
+
+    // 2. GUARD: If the selector or units aren't ready, stop immediately
+    if (selectedChem == null || unit1 == null || unit2 == null || unit3 == null) {
+        return;
+    }
+
+    // 3. SECURE ACCESS: Now it's safe to touch the TreeMap
+    ChemData data = chemRegistry.get(selectedChem);
+    if (data == null) return;
+
+    try {
+        double v1 = parse(cf1.getText());
+        
+        // Use the 'unit1' variable we already null-checked
+        if (unit1.equals("°C")) v1 += 273.15;
+        else if (unit1.equals("°F")) v1 = (v1 - 32) * 5/9 + 273.15;
+        
+        v1 *= data.factors[0][cu1.getSelectedIndex()];
+
+        double v2 = parse(cf2.getText()) * data.factors[1][cu2.getSelectedIndex()];
+        double v3 = parse(cf3.getText()) * data.factors[2][cu3.getSelectedIndex()];
+
+        int target = (activeChemFieldIdx == 2) ? 0 : 2;
+        double result = data.solver.apply(new double[]{v1, v2, v3}, target);
+
+        isChemInternalUpdate = true;
+        // Divide result back by the target factor before displaying
+        cf3.setText(format(result / data.factors[2][cu3.getSelectedIndex()]));
+        isChemInternalUpdate = false;
+    } catch (Exception e) {
+        // This will now actually catch math/parsing errors instead of crashing
+        isChemInternalUpdate = false; 
+    }
+    }
+    
+    private static JPanel createKeypad(java.util.function.Consumer<String> callback) {
+        JPanel p = new JPanel(new GridLayout(4, 3, 5, 5));
+        p.setBackground(currentTheme.bgColor);
+        p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        String[] keys = {"7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "C"};
+        for (String k : keys) {
+            JButton b = new JButton(k);
+            b.setFont(new Font("Segoe UI", Font.BOLD, 18));
+            b.setBackground(currentTheme.regularButton);
+            if(b.equals("C")) b.setForeground(currentTheme.clearColor);
+            else b.setForeground(currentTheme.foreground);
+            b.setFocusPainted(false);
+            b.setBorder(BorderFactory.createLineBorder(new Color(60, 60, 60)));
+            b.addActionListener(e -> callback.accept(k));
+            p.add(b);
+        }
+        return p;
+    }
+
+    private static JTextField createChemField(int idx, boolean isDerived) {
+        JTextField f = new JTextField();
+        f.setBackground(currentTheme.bgColor); 
+        f.setForeground(isDerived ? new Color(0, 255, 255) : currentTheme.foreground);
+        f.setFont(new Font("Segoe UI", Font.PLAIN, 22));
+        f.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(60, 60, 60)));
+        
+        f.addFocusListener(new java.awt.event.FocusAdapter() { 
+            public void focusGained(java.awt.event.FocusEvent e) { 
+                activeChemFieldIdx = idx; 
+                f.setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(0, 150, 255)));
+            } 
+            public void focusLost(java.awt.event.FocusEvent e) {
+                f.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(60, 60, 60)));
+            }
+        });
+        f.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { runChemCalc(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { runChemCalc(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { runChemCalc(); }
+        });
+        return f;
+    }
+
+    private static JComboBox<String> createChemUnitCombo() {
+        JComboBox<String> cb = new JComboBox<>();
+        cb.setBackground(currentTheme.bgColor);
+        cb.setForeground(new Color(150, 150, 150));
+        cb.setBorder(BorderFactory.createEmptyBorder());
+        cb.addActionListener(e -> runChemCalc());
+        return cb;
+    }
+
+    private static JPanel assembleRow(JLabel l, JTextField f, JComboBox<String> u) {
+        JPanel p = new JPanel(new BorderLayout(10, 5));
+        p.setBackground(currentTheme.bgColor);
+        p.add(l, BorderLayout.NORTH); 
+        p.add(f, BorderLayout.CENTER); 
+        p.add(u, BorderLayout.EAST);
+        return p;
+    }
+
+    private static void handleScientificInput(String val, boolean isPhys) {
+        JTextField active = isPhys ? (activeFieldIdx == 0 ? pf1 : pf2) : (activeChemFieldIdx == 0 ? cf1 : cf2);
+        if (val.equals("C")) active.setText("");
+        else if (val.equals("CE")) {
+            String s = active.getText();
+            if (s.length() > 0) active.setText(s.substring(0, s.length() - 1));
+        } else {
+            active.setText(active.getText() + val);
+        }
+    }
+    private static class ContourPanel extends JPanel {
+    private String formula = "";
+    private double zLevel = 0;
+
+    public void updateData(String formula, double zLevel) {
+        this.formula = formula;
+        this.zLevel = zLevel;
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        if (formula.isEmpty()) return;
+        
+        Graphics2D g2d = (Graphics2D) g;
+        g2d.setColor(currentTheme.foreground);
+        
+        // Simple 2D scanline to find where f(x,y) approx equals zLevel
+        double step = 0.1;
+        for (double x = -10; x <= 10; x += step) {
+            for (double y = -10; y <= 10; y += step) {
+                if (Math.abs(eval(formula, x, y, 0) - zLevel) < 0.1) {
+                    int px = (int) (getWidth() / 2 + x * 20);
+                    int py = (int) (getHeight() / 2 - y * 20);
+                    g2d.fillRect(px, py, 2, 2);
+                }
+            }
+        }
+    }
+    }
+    public static JPanel createHelpPanel() {
+    JPanel panel = new JPanel();
+    panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+    panel.setBackground(currentTheme.bgColor);
+    panel.setBorder(BorderFactory.createEmptyBorder(30, 40, 30, 40));
+
+    // --- 1. HEADER TITLE ---
+    JLabel titleLabel = new JLabel("Application Guide & Help");
+    titleLabel.setForeground(currentTheme.foreground);
+    titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 22));
+    titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+    panel.add(titleLabel);
+    panel.add(Box.createVerticalStrut(10));
+
+    // --- 2. SUBTITLE / INTRO ---
+    JLabel subLabel = new JLabel("Below you'll find quick tips to navigate the app.");
+    subLabel.setForeground(currentTheme.foreground);
+    subLabel.setFont(new Font("Segoe UI", Font.ITALIC, 14));
+    subLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+    panel.add(subLabel);
+    panel.add(Box.createVerticalStrut(25));
+
+    // --- 3. HELP CONTENT ---
+    // Section: Graphing
+    panel.add(createHelpSection("Exponentation(^) and Rooting(√)", 
+        "Use ^ to carry out exponentation. " +
+        "Use √x to find out the square root. n√x finds the 'n'th root of x."));
+    panel.add(Box.createVerticalStrut(15));
+
+    // Section: Themes
+    panel.add(createHelpSection("2D Graphing", 
+        "Graphing x^n graphs should be replaced with x*x*x...n times as the software currently does not support '^'." +
+        "Arithmos is currently under progress and does not support linear, quadratic or cubic equation graphing in 2D"));
+    panel.add(Box.createVerticalStrut(15));
+
+    // Section: Formulas & Other Panels
+    panel.add(createHelpSection("3D Graphing", 
+        "Add, Subtract or Multiply any equation with 't' to get a moving graph" +
+        "Arithmos is currently under progress and does not show the equations typed on the equation bar."));
+    
+
+    panel.add(Box.createVerticalGlue()); // Keeps everything cleanly pushed to the top
+
+    // Force rendering update
+    panel.revalidate();
+    panel.repaint();
+
+    return panel;
+    }
+    private static JPanel createHelpSection(String title, String bodyText) {
+    JPanel section = new JPanel();
+    section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+    section.setBackground(currentTheme.bgColor);
+    section.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    // Section Subheader
+    JLabel sectionTitle = new JLabel(title);
+    sectionTitle.setForeground(currentTheme.memoryDegColor); // Uses your accent accent color!
+    sectionTitle.setFont(new Font("Segoe UI", Font.BOLD, 15));
+    sectionTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    // Body text using JTextArea for reliable line wrapping
+    JTextArea sectionBody = new JTextArea(bodyText);
+    sectionBody.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+    sectionBody.setForeground(currentTheme.foreground);
+    sectionBody.setBackground(currentTheme.bgColor);
+    sectionBody.setLineWrap(true);
+    sectionBody.setWrapStyleWord(true);
+    sectionBody.setEditable(false);
+    sectionBody.setFocusable(false);
+    sectionBody.setAlignmentX(Component.LEFT_ALIGNMENT);
+    // Give it a tiny indent from the header
+    sectionBody.setBorder(BorderFactory.createEmptyBorder(5, 15, 0, 0)); 
+
+    section.add(sectionTitle);
+    section.add(sectionBody);
+    
+    return section;
+    }
 }
